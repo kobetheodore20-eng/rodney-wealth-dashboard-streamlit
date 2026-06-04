@@ -12,7 +12,7 @@ import pandas as pd
 from pandas.errors import EmptyDataError
 import streamlit as st
 
-from app.config import DATA_DIR, PRICE_CACHE_PATH
+from app.config import DATA_DIR, ENCRYPTED_DATA_BUNDLE_PATH, PRICE_CACHE_PATH
 
 
 def secret_data_bundle() -> zipfile.ZipFile | None:
@@ -27,6 +27,23 @@ def secret_data_bundle() -> zipfile.ZipFile | None:
     return zipfile.ZipFile(io.BytesIO(payload))
 
 
+def encrypted_data_bundle() -> zipfile.ZipFile | None:
+    if not ENCRYPTED_DATA_BUNDLE_PATH.exists():
+        return None
+    try:
+        key = st.secrets.get("DATA_BUNDLE_KEY")
+    except Exception:  # noqa: BLE001 - secrets may be absent in local development.
+        key = None
+    key = os.environ.get("WEALTH_COCKPIT_DATA_BUNDLE_KEY") or key
+    if not key:
+        return None
+
+    from cryptography.fernet import Fernet
+
+    payload = Fernet(str(key).encode("utf-8")).decrypt(ENCRYPTED_DATA_BUNDLE_PATH.read_bytes())
+    return zipfile.ZipFile(io.BytesIO(payload))
+
+
 def read_table(name: str) -> pd.DataFrame:
     path = DATA_DIR / f"{name}.csv"
     if path.exists():
@@ -35,7 +52,7 @@ def read_table(name: str) -> pd.DataFrame:
         except EmptyDataError:
             return pd.DataFrame()
 
-    bundle = secret_data_bundle()
+    bundle = secret_data_bundle() or encrypted_data_bundle()
     member = f"{name}.csv"
     if not bundle or member not in bundle.namelist():
         return pd.DataFrame()
