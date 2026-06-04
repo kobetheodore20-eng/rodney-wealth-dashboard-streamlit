@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+import re
 
 import pandas as pd
 
@@ -12,16 +13,18 @@ from app.config import DATA_DIR, SOURCE_WORKBOOK  # noqa: E402
 
 
 SHEETS = {
+    "executive_dashboard": ("01 Executive Dashboard", "As of"),
     "balance_sheet": ("02 Balance Sheet", "Asset class"),
-    "entity_ownership": ("02A Entity Ownership View", "Asset / entity"),
+    "entity_ownership": ("02A Entity Ownership View", "Asset / bucket"),
     "liquidity_buckets": ("03 Liquidity Buckets", "Bucket"),
     "property_register": ("04 Property Register", "Property"),
     "loan_offset_register": ("05 Loan Offset Register", "Property"),
     "property_pnl": ("06 Property P&L", "Property"),
     "keith_statements": ("06A Keith Statements", "Statement #"),
     "keith_maintenance": ("06B Keith Maintenance", "Record type"),
-    "land_tax_control": ("06D Land Tax Control", "Property"),
-    "last_month_cashflow": ("06E Last Month Cashflow", "Item"),
+    "keith_coverage": ("06C Keith Coverage", "Control item"),
+    "land_tax_control": ("06D Land Tax Control", "Property / entity"),
+    "last_month_cashflow": ("06E Last Month Cashflow", "Property"),
     "investment_register": ("07 Investment Register", "Asset / sleeve"),
     "listed_share_snapshot": ("07A Listed Share Snapshot", "Ticker"),
     "share_transactions": ("07B Share Transactions", "Date"),
@@ -37,12 +40,28 @@ SHEETS = {
 }
 
 
+def slugify(value: str) -> str:
+    value = re.sub(r"[^a-zA-Z0-9]+", "_", value.lower()).strip("_")
+    return value or "sheet"
+
+
 def clean_frame(frame: pd.DataFrame) -> pd.DataFrame:
     frame = frame.dropna(how="all")
     frame = frame.loc[:, ~frame.columns.astype(str).str.startswith("Unnamed")]
     frame = frame.dropna(how="all")
     frame.columns = [str(col).strip() for col in frame.columns]
     return frame.reset_index(drop=True)
+
+
+def read_raw_sheet(sheet_name: str) -> pd.DataFrame:
+    raw = pd.read_excel(SOURCE_WORKBOOK, sheet_name=sheet_name, header=None)
+    raw = raw.dropna(how="all")
+    raw = raw.loc[:, ~raw.isna().all(axis=0)]
+    raw = raw.fillna("")
+    if raw.empty:
+        return raw
+    raw.columns = [f"Column {idx + 1}" for idx in range(len(raw.columns))]
+    return raw.reset_index(drop=True)
 
 
 def read_sheet_table(sheet_name: str, header_marker: str) -> pd.DataFrame:
@@ -69,6 +88,17 @@ def main() -> None:
         raise FileNotFoundError(f"Workbook not found: {SOURCE_WORKBOOK}")
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    sheet_index = []
+    workbook = pd.ExcelFile(SOURCE_WORKBOOK)
+    for sheet_name in workbook.sheet_names:
+        output_name = f"workbook_{slugify(sheet_name)}"
+        frame = read_raw_sheet(sheet_name)
+        frame.to_csv(DATA_DIR / f"{output_name}.csv", index=False)
+        sheet_index.append({"Sheet": sheet_name, "Table": output_name, "Rows": len(frame), "Columns": len(frame.columns)})
+
+    pd.DataFrame(sheet_index).to_csv(DATA_DIR / "workbook_sheet_index.csv", index=False)
+    print(f"Imported {len(sheet_index)} raw workbook sheets -> data/workbook_*.csv")
+
     for output_name, (sheet_name, header_marker) in SHEETS.items():
         frame = read_sheet_table(sheet_name, header_marker)
         frame.to_csv(DATA_DIR / f"{output_name}.csv", index=False)

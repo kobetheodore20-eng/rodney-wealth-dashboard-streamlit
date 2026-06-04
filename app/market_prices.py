@@ -45,7 +45,7 @@ def fetch_yahoo_price(symbol: str) -> dict[str, object]:
     response = requests.get(
         url,
         params={"range": "1d", "interval": "1d"},
-        headers={"User-Agent": "Rodney Wealth Cockpit prototype"},
+        headers={"User-Agent": "Mozilla/5.0 Rodney Wealth Cockpit"},
         timeout=10,
     )
     response.raise_for_status()
@@ -53,6 +53,8 @@ def fetch_yahoo_price(symbol: str) -> dict[str, object]:
     result = payload["chart"]["result"][0]
     meta = result["meta"]
     price = meta.get("regularMarketPrice") or meta.get("previousClose")
+    if price is None:
+        raise ValueError(f"No public price returned for {symbol}")
     currency = meta.get("currency", "")
     return {
         "symbol": symbol,
@@ -78,10 +80,11 @@ def fetch_usd_aud() -> dict[str, object]:
 
 def refresh_prices(tickers: Iterable[str]) -> dict[str, object]:
     cache = read_price_cache()
-    prices = cache.get("prices", {})
+    requested = sorted({str(t).strip().upper() for t in tickers if is_trackable_ticker(str(t))})
+    prices = {ticker: cache.get("prices", {}).get(ticker, {}) for ticker in requested if cache.get("prices", {}).get(ticker)}
     errors: dict[str, str] = {}
 
-    for ticker in sorted({str(t).strip().upper() for t in tickers if is_trackable_ticker(str(t))}):
+    for ticker in requested:
         symbol = yahoo_symbol(ticker)
         try:
             prices[ticker] = fetch_yahoo_price(symbol)

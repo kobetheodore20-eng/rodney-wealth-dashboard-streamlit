@@ -90,6 +90,26 @@ def latest_month_bridge() -> pd.DataFrame:
     return pd.DataFrame(bridge, columns=["Driver", "Monthly change", "Comment"])
 
 
+def monthly_component_changes() -> pd.DataFrame:
+    changes = monthly_change_view()
+    if changes.empty:
+        return changes
+    cols = [
+        "Date",
+        "Cash / offsets MoM",
+        "Property equity MoM",
+        "Crypto MoM",
+        "Shares MoM",
+        "Super MoM",
+        "Debt reduction",
+        "Net worth MoM",
+    ]
+    cols = [col for col in cols if col in changes.columns]
+    frame = changes[cols].copy()
+    frame = frame.iloc[1:].reset_index(drop=True)
+    return frame
+
+
 def price_source_view() -> pd.DataFrame:
     holdings = holdings_with_live_prices()
     if holdings.empty:
@@ -110,7 +130,9 @@ def price_source_view() -> pd.DataFrame:
                 as_of = datetime.fromtimestamp(int(market_time), tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
             except (TypeError, ValueError, OSError):
                 as_of = "Unknown"
-        if not market_time:
+        if not market_time and row.get("Price basis") == "Live public feed":
+            as_of = cache.get("updated_at") or "Public feed timestamp unavailable"
+        elif not market_time:
             as_of = "Workbook fallback"
         rows.append(
             {

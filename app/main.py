@@ -18,6 +18,7 @@ from app.portfolio import (
     executive_brief,
     holdings_with_live_prices,
     latest_month_bridge,
+    monthly_component_changes,
     monthly_change_view,
     numeric,
     price_source_view,
@@ -498,13 +499,26 @@ def render_overview() -> None:
         stress = stress_view()
         show_table(stress)
 
-    section("Monthly path", "Net worth history imported from the workbook monthly tracker.")
+    section("Wealth movement", "The useful view is not just the line; it is what changed the line each month.")
+    components = monthly_component_changes()
+    if not components.empty:
+        component_chart = components.copy()
+        component_chart["Date"] = pd.to_datetime(component_chart["Date"], errors="coerce")
+        component_cols = [
+            col
+            for col in ["Cash / offsets MoM", "Property equity MoM", "Crypto MoM", "Shares MoM", "Super MoM", "Debt reduction"]
+            if col in component_chart
+        ]
+        st.bar_chart(component_chart.set_index("Date")[component_cols])
+
     monthly = read_table("monthly_tracking")
     if not monthly.empty:
         chart = monthly.copy()
         chart["Date"] = pd.to_datetime(chart["Date"], errors="coerce")
         chart["Net worth"] = numeric(chart["Net worth"])
-        st.line_chart(chart.set_index("Date")[["Net worth"]])
+        with st.expander("Net worth path and source monthly tracker", expanded=False):
+            st.line_chart(chart.set_index("Date")[["Net worth"]])
+            show_table(monthly, height=320)
 
 
 def render_model_library() -> None:
@@ -514,14 +528,14 @@ def render_model_library() -> None:
     html = f"""
     <div class="model-grid">
       <div class="model-card"><span>Balance sheet date</span><strong>{metrics.get('as_of')}</strong></div>
-      <div class="model-card"><span>Imported tables</span><strong>22</strong></div>
+      <div class="model-card"><span>Imported model tables</span><strong>25 sheets + controls</strong></div>
       <div class="model-card"><span>Primary source</span><strong>Excel workbook</strong></div>
       <div class="model-card"><span>Operating mode</span><strong>Evidence-backed</strong></div>
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
 
-    model_tabs = st.tabs(["Balance", "Liquidity", "Investments", "Shares", "Retirement", "Monthly"])
+    model_tabs = st.tabs(["Balance", "Liquidity", "Investments", "Shares", "Retirement", "Monthly", "Full workbook"])
     with model_tabs[0]:
         show_table(read_table("balance_sheet"), percent_cols=["% net worth", "Target min", "Target base", "Target max"])
         show_table(read_table("entity_ownership"))
@@ -540,6 +554,14 @@ def render_model_library() -> None:
         show_table(read_table("super_retirement"))
     with model_tabs[5]:
         show_table(monthly_change_view(), height=420, percent_cols=["Net worth MoM %"])
+    with model_tabs[6]:
+        index = read_table("workbook_sheet_index")
+        if index.empty:
+            st.info("Full workbook sheet index has not been imported yet.")
+        else:
+            selected = st.selectbox("Workbook sheet", index["Sheet"].astype(str).tolist())
+            table_name = index.loc[index["Sheet"].astype(str).eq(selected), "Table"].iloc[0]
+            show_table(read_table(table_name), height=520)
 
 
 def render_market_tape() -> None:
@@ -557,10 +579,13 @@ def render_market_tape() -> None:
     if left.button("Refresh market tape", width="stretch"):
         with st.spinner("Refreshing public market prices and USD/AUD..."):
             cache = refresh_prices(tickers)
-        st.success("Market tape refreshed.")
+        refreshed_count = len(cache.get("prices", {}))
+        fallback_count = len(cache.get("errors", {}))
+        st.success(f"Market tape refreshed: {refreshed_count} public prices updated; {fallback_count} workbook fallbacks retained.")
     right.caption(f"Refresh run: {cache.get('updated_at') or 'Not refreshed yet'}")
     if cache.get("errors"):
-        st.warning(f"Some prices could not be refreshed: {cache['errors']}")
+        with st.expander("Public feed gaps", expanded=False):
+            st.write(cache["errors"])
 
     if not price_sources.empty:
         public_sources = price_sources[~price_sources["Price as of"].astype(str).eq("Workbook fallback")]
@@ -601,7 +626,7 @@ def render_property_and_debt() -> None:
         c3.metric("Offsets", money(props["Offset"].sum()))
         c4.metric("Net property debt", money((props["Loan"] - props["Offset"]).sum()))
 
-    tabs = st.tabs(["Register", "Loans", "P&L", "Keith", "Controls"])
+    tabs = st.tabs(["Register", "Loans", "P&L", "Keith", "Keith coverage", "Controls"])
     with tabs[0]:
         show_table(props, height=360)
     with tabs[1]:
@@ -613,6 +638,8 @@ def render_property_and_debt() -> None:
         with st.expander("Maintenance and inspection register"):
             show_table(read_table("keith_maintenance"), height=360)
     with tabs[4]:
+        show_table(read_table("keith_coverage"), height=360)
+    with tabs[5]:
         show_table(read_table("land_tax_control"), height=360)
         show_table(read_table("last_month_cashflow"), height=240)
 
