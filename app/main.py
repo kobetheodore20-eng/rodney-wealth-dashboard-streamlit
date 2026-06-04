@@ -18,7 +18,6 @@ from app.portfolio import (
     executive_brief,
     holdings_with_live_prices,
     latest_month_bridge,
-    monthly_component_changes,
     monthly_change_view,
     numeric,
     price_source_view,
@@ -392,6 +391,23 @@ def show_table(frame: pd.DataFrame, height: int | None = None, percent_cols: lis
     st.dataframe(format_display(frame, percent_cols), **kwargs)
 
 
+def movement_chart_data() -> pd.DataFrame:
+    changes = monthly_change_view()
+    if changes.empty:
+        return changes
+    cols = [
+        "Date",
+        "Cash / offsets MoM",
+        "Property equity MoM",
+        "Crypto MoM",
+        "Shares MoM",
+        "Super MoM",
+        "Debt reduction",
+    ]
+    cols = [col for col in cols if col in changes.columns]
+    return changes[cols].iloc[1:].reset_index(drop=True)
+
+
 def render_header() -> None:
     metrics = summary_metrics()
     st.markdown(
@@ -500,7 +516,7 @@ def render_overview() -> None:
         show_table(stress)
 
     section("Wealth movement", "The useful view is not just the line; it is what changed the line each month.")
-    components = monthly_component_changes()
+    components = movement_chart_data()
     if not components.empty:
         component_chart = components.copy()
         component_chart["Date"] = pd.to_datetime(component_chart["Date"], errors="coerce")
