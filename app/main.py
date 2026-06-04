@@ -342,11 +342,13 @@ def require_access() -> bool:
         return True
 
     st.markdown("<div class='hero'><div class='hero-title'>Rodney<br>Wealth Cockpit</div></div>", unsafe_allow_html=True)
-    entered = st.text_input("Access code", type="password")
-    if entered and hmac.compare_digest(entered, str(password)):
+    with st.form("access_gate"):
+        entered = st.text_input("Access code", type="password")
+        submitted = st.form_submit_button("Unlock")
+    if submitted and hmac.compare_digest(entered, str(password)):
         st.session_state["authenticated"] = True
         st.rerun()
-    elif entered:
+    elif submitted:
         st.error("Access code incorrect.")
     return False
 
