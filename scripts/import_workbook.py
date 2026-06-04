@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 
 import pandas as pd
+from openpyxl import load_workbook
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -83,6 +84,27 @@ def read_sheet_table(sheet_name: str, header_marker: str) -> pd.DataFrame:
     return clean_frame(frame)
 
 
+def formula_audit() -> dict[str, dict[str, object]]:
+    workbook = load_workbook(SOURCE_WORKBOOK, read_only=True, data_only=False)
+    audit: dict[str, dict[str, object]] = {}
+    for worksheet in workbook.worksheets:
+        formula_cells = 0
+        populated_cells = 0
+        for row in worksheet.iter_rows():
+            for cell in row:
+                if cell.value not in (None, ""):
+                    populated_cells += 1
+                if cell.data_type == "f":
+                    formula_cells += 1
+        audit[worksheet.title] = {
+            "Formula cells": formula_cells,
+            "Populated cells": populated_cells,
+            "Formula fidelity": "CSV cached values only; formulas not recalculated" if formula_cells else "No formulas detected",
+        }
+    workbook.close()
+    return audit
+
+
 def main() -> None:
     if not SOURCE_WORKBOOK.exists():
         raise FileNotFoundError(f"Workbook not found: {SOURCE_WORKBOOK}")
@@ -90,11 +112,20 @@ def main() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     sheet_index = []
     workbook = pd.ExcelFile(SOURCE_WORKBOOK)
+    audit = formula_audit()
     for sheet_name in workbook.sheet_names:
         output_name = f"workbook_{slugify(sheet_name)}"
         frame = read_raw_sheet(sheet_name)
         frame.to_csv(DATA_DIR / f"{output_name}.csv", index=False)
-        sheet_index.append({"Sheet": sheet_name, "Table": output_name, "Rows": len(frame), "Columns": len(frame.columns)})
+        sheet_index.append(
+            {
+                "Sheet": sheet_name,
+                "Table": output_name,
+                "Rows": len(frame),
+                "Columns": len(frame.columns),
+                **audit.get(sheet_name, {"Formula cells": 0, "Populated cells": 0, "Formula fidelity": "Not audited"}),
+            }
+        )
 
     pd.DataFrame(sheet_index).to_csv(DATA_DIR / "workbook_sheet_index.csv", index=False)
     print(f"Imported {len(sheet_index)} raw workbook sheets -> data/workbook_*.csv")

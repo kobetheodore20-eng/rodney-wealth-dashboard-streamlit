@@ -68,8 +68,16 @@ def write_table(name: str, frame: pd.DataFrame) -> None:
     frame.to_csv(DATA_DIR / f"{name}.csv", index=False)
 
 
+def local_writes_enabled() -> bool:
+    return os.environ.get("WEALTH_COCKPIT_ENABLE_LOCAL_WRITES") == "1"
+
+
 def read_json(path: Path, default: Any) -> Any:
     if not path.exists():
+        bundle = secret_data_bundle() or encrypted_data_bundle()
+        if bundle and path.name in bundle.namelist():
+            with bundle.open(path.name) as handle:
+                return json.load(handle)
         return default
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)

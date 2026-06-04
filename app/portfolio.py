@@ -7,6 +7,9 @@ import pandas as pd
 from app.data_store import read_price_cache, read_table
 from app.market_prices import is_trackable_ticker
 
+PRICE_TOLERANCE_LOW = 0.5
+PRICE_TOLERANCE_HIGH = 1.5
+
 
 def numeric(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce").fillna(0)
@@ -117,30 +120,43 @@ def price_source_view() -> pd.DataFrame:
     rows = []
     cache = read_price_cache()
     prices = cache.get("prices", {})
+    provenance = cache.get("provenance", {})
     for _, row in holdings.iterrows():
         ticker = str(row.get("Ticker", "")).strip().upper()
         cached = prices.get(ticker, {})
         market_time = cached.get("market_time")
+        row_status = row.get("Provenance status") or provenance.get(ticker, {}).get("status") or "workbook_fallback"
+        price_basis = str(row.get("Price basis", ""))
         as_of = "Workbook fallback"
+        public_as_of = ""
         source = cached.get("source") or "Workbook screenshot / imported value"
-        if row.get("Price basis") == "Workbook fallback":
-            source = "Workbook screenshot/imported value; public feed unavailable or ignored"
         if market_time:
             try:
-                as_of = datetime.fromtimestamp(int(market_time), tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                public_as_of = datetime.fromtimestamp(int(market_time), tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
             except (TypeError, ValueError, OSError):
-                as_of = "Unknown"
-        if not market_time and row.get("Price basis") == "Live public feed":
-            as_of = cache.get("updated_at") or "Public feed timestamp unavailable"
-        elif not market_time:
-            as_of = "Workbook fallback"
+                public_as_of = "Unknown"
+        elif price_basis in {"Live public feed", "Stale cached public feed"}:
+            public_as_of = cache.get("updated_at") or "Public feed timestamp unavailable"
+
+        if price_basis.startswith("Workbook fallback"):
+            source = "Workbook screenshot/imported value"
+            if row_status == "workbook_fallback_public_outside_tolerance":
+                as_of = "Workbook fallback; public price outside tolerance"
+            else:
+                as_of = "Workbook fallback"
+        else:
+            as_of = public_as_of or "Public feed timestamp unavailable"
         rows.append(
             {
                 "Ticker": ticker,
                 "Symbol": cached.get("symbol") or ticker,
                 "Currency": row.get("Currency"),
                 "Price used": row.get("Live price"),
+                "Workbook price": row.get("Workbook price"),
+                "% vs workbook": row.get("Public price vs workbook"),
                 "Price as of": as_of,
+                "Provenance status": row_status,
+                "Tolerance check": row.get("Tolerance check"),
                 "Source": source,
             }
         )
@@ -153,6 +169,8 @@ def price_source_view() -> pd.DataFrame:
                 "Currency": "FX",
                 "Price used": fx.get("rate"),
                 "Price as of": fx.get("source_time") or cache.get("updated_at"),
+                "Provenance status": cache.get("refresh", {}).get("fx_status") or "fx_cached",
+                "Tolerance check": "Not applicable",
                 "Source": fx.get("source", "FX source"),
             }
         )
@@ -162,13 +180,26 @@ def price_source_view() -> pd.DataFrame:
 def allocation_view() -> pd.DataFrame:
     balance = current_balance_sheet()
     metrics = summary_metrics()
-    if balance.empty:
-        return balance
+    required = {"Asset class", "Current value"}
+    if balance.empty or not required.issubset(balance.columns):
+        return pd.DataFrame(
+            columns=[
+                "Asset class",
+                "Current value",
+                "Current allocation",
+                "Target min",
+                "Target base",
+                "Target max",
+                "Drift vs target",
+                "Owner/lens",
+                "Notes",
+            ]
+        )
     rows = balance[balance["Asset class"].isin(["Cash / offsets", "Property equity", "Crypto", "Shares", "Super"])].copy()
     rows["Current value"] = numeric(rows["Current value"])
     net_worth = metrics.get("net_worth") or rows["Current value"].sum()
     rows["Current allocation"] = rows["Current value"] / net_worth if net_worth else 0
-    rows["Target base"] = numeric(rows["Target base"])
+    rows["Target base"] = numeric(rows.get("Target base", pd.Series(0, index=rows.index)))
     rows["Drift vs target"] = rows["Current allocation"] - rows["Target base"]
     return rows
 
@@ -300,21 +331,42 @@ def holdings_with_live_prices() -> pd.DataFrame:
     live_prices = []
     live_values_aud = []
     price_basis = []
+    workbook_prices = []
+    price_ratios = []
+    tolerance_checks = []
+    provenance_statuses = []
+    cache_provenance = cache.get("provenance", {})
     for _, row in holdings.iterrows():
         ticker = str(row.get("Ticker", "")).strip().upper()
         currency = str(row.get("Currency", "AUD")).strip().upper()
         price = price_map.get(ticker, {}).get("price")
+        cache_status = cache_provenance.get(ticker, {}).get("status")
         workbook_price = float(row["Native value"]) / float(row["Shares"]) if row["Shares"] else 0
-        if price and workbook_price:
-            live_ratio = float(price) / workbook_price
-            if live_ratio < 0.5 or live_ratio > 1.5:
-                price = None
-        basis = "Live public feed" if price else "Workbook fallback"
-        if not price and row["Shares"]:
+        workbook_prices.append(workbook_price)
+        ratio = float(price) / workbook_price if price and workbook_price else None
+        price_ratios.append(ratio)
+        if price and workbook_price and (ratio < PRICE_TOLERANCE_LOW or ratio > PRICE_TOLERANCE_HIGH):
+            price = workbook_price if row["Shares"] else None
+            basis = "Workbook fallback - public outside tolerance"
+            tolerance_check = "Outside 50% tolerance"
+            provenance_status = "workbook_fallback_public_outside_tolerance"
+        elif price:
+            basis = "Stale cached public feed" if cache_status == "stale_cache_after_refresh_error" else "Live public feed"
+            tolerance_check = "Within 50% tolerance" if workbook_price else "No workbook comparison"
+            provenance_status = "stale_cache_price_used" if cache_status == "stale_cache_after_refresh_error" else "public_price_used"
+        elif row["Shares"]:
             price = workbook_price
             basis = "Workbook fallback"
+            tolerance_check = "No public price"
+            provenance_status = "workbook_fallback_no_public_price"
+        else:
+            basis = "Workbook fallback"
+            tolerance_check = "No shares"
+            provenance_status = "workbook_fallback_no_shares"
         live_prices.append(price)
         price_basis.append(basis)
+        tolerance_checks.append(tolerance_check)
+        provenance_statuses.append(provenance_status)
         if price:
             value = float(row["Shares"]) * float(price)
             if currency == "USD":
@@ -327,7 +379,11 @@ def holdings_with_live_prices() -> pd.DataFrame:
             live_values_aud.append(value)
 
     holdings["Live price"] = live_prices
+    holdings["Workbook price"] = workbook_prices
+    holdings["Public price vs workbook"] = price_ratios
     holdings["Price basis"] = price_basis
+    holdings["Tolerance check"] = tolerance_checks
+    holdings["Provenance status"] = provenance_statuses
     holdings["Live value AUD"] = live_values_aud
     holdings["Cost base AUD"] = holdings["Implied cost base native"]
     holdings.loc[holdings["Currency"].astype(str).str.upper().eq("USD"), "Cost base AUD"] *= float(usd_aud)
