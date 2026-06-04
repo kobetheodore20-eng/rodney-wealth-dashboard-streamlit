@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import importlib
 import os
 import sys
 from pathlib import Path
@@ -11,7 +12,15 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import AUTHORITY_BOUNDARY, SOURCE_WORKBOOK, SOURCE_WORKBOOK_LABEL
-from app.data_store import local_writes_enabled, money, read_price_cache, read_table, write_table
+from app import data_store
+
+data_store = importlib.reload(data_store)
+local_writes_enabled = getattr(data_store, "local_writes_enabled", lambda: os.environ.get("WEALTH_COCKPIT_ENABLE_LOCAL_WRITES") == "1")
+money = data_store.money
+read_price_cache = data_store.read_price_cache
+read_table = data_store.read_table
+write_table = data_store.write_table
+
 from app.insights import (
     banker_signals,
     monthly_attribution,
