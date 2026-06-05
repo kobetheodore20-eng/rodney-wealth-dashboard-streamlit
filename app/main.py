@@ -63,6 +63,8 @@ st.markdown(
       --mist: #e9e9e4;
       --blue: #435d67;
       --green: #2f6554;
+      --gain: #24745c;
+      --loss: #a34038;
       --amber: #8b744b;
       --line: #d8d8d1;
     }
@@ -300,6 +302,9 @@ st.markdown(
       font-weight: 620;
       font-size: 1.1rem;
     }
+    .positive { color: var(--gain) !important; }
+    .negative { color: var(--loss) !important; }
+    .neutral { color: var(--muted) !important; }
     .change-note {
       color: var(--muted);
       font-size: 0.78rem;
@@ -435,6 +440,21 @@ CURRENCY_HINTS = [
 ]
 PERCENT_HINTS = ["allocation", "target", "lvr", "yield", "return", "ratio", "threshold", "%", "drift"]
 PRICE_COLUMNS = {"Live price", "Price used", "Current price native"}
+GROWTH_HINTS = [
+    "mom",
+    "change",
+    "delta",
+    "growth",
+    "swing",
+    "return",
+    "p/l",
+    "profit",
+    "loss",
+    "drift",
+    "impact",
+    "reduction",
+    "Δ",
+]
 
 
 def configured_password() -> str | None:
@@ -487,7 +507,54 @@ def show_table(frame: pd.DataFrame, height: int | None = None, percent_cols: lis
     kwargs = {"width": "stretch", "hide_index": True}
     if height is not None:
         kwargs["height"] = height
-    st.dataframe(format_display(frame, percent_cols), **kwargs)
+    display = format_display(frame, percent_cols)
+    styles = growth_styles(frame)
+    if styles.replace("", pd.NA).notna().any().any():
+        st.dataframe(display.style.apply(lambda _: styles, axis=None), **kwargs)
+    else:
+        st.dataframe(display, **kwargs)
+
+
+def tone_class(value: object) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "neutral"
+    if number > 0:
+        return "positive"
+    if number < 0:
+        return "negative"
+    return "neutral"
+
+
+def signed_money(value: object) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return money(value)
+    prefix = "+" if number > 0 else ""
+    return f"{prefix}{money(number)}"
+
+
+def growth_styles(frame: pd.DataFrame) -> pd.DataFrame:
+    styles = pd.DataFrame("", index=frame.index, columns=frame.columns)
+    for col in frame.columns:
+        lower = str(col).lower()
+        if not any(hint.lower() in lower for hint in GROWTH_HINTS):
+            continue
+        values = pd.to_numeric(frame[col], errors="coerce")
+        if not values.notna().any():
+            continue
+        styles[col] = values.map(
+            lambda value: (
+                "color: #24745c; font-weight: 650;"
+                if pd.notna(value) and value > 0
+                else "color: #a34038; font-weight: 650;"
+                if pd.notna(value) and value < 0
+                else "color: #777b80;"
+            )
+        )
+    return styles
 
 
 def movement_chart_data() -> pd.DataFrame:
@@ -510,7 +577,7 @@ def movement_chart_data() -> pd.DataFrame:
 def render_header() -> None:
     metrics = summary_metrics()
     monthly_delta = float(metrics.get("monthly_delta") or 0)
-    delta_prefix = "+" if monthly_delta > 0 else ""
+    delta_tone = tone_class(monthly_delta)
     st.markdown(
         f"""
         <div class="hero">
@@ -518,7 +585,7 @@ def render_header() -> None:
           <div class="hero-sub">A private wealth operating system: track the balance sheet, explain the monthly movement, separate live market marks from workbook fallbacks, and keep every decision approval-gated.</div>
           <div class="hero-meta">
             <div class="pill">A${metrics['net_worth'] / 1_000_000:,.2f}m net worth</div>
-            <div class="pill">{delta_prefix}{money(monthly_delta)} month-on-month</div>
+            <div class="pill {delta_tone}">{signed_money(monthly_delta)} month-on-month</div>
             <div class="pill">{metrics.get('as_of') or 'Latest import'}</div>
             <div class="pill">Rodney approval required</div>
           </div>
@@ -532,7 +599,7 @@ def render_command_deck() -> None:
     metrics = summary_metrics()
     score = wealth_scorecard()
     monthly_delta = float(metrics.get("monthly_delta") or 0)
-    delta_prefix = "+" if monthly_delta > 0 else ""
+    delta_tone = tone_class(monthly_delta)
     mandates = score.head(4).to_dict("records") if not score.empty else []
     while len(mandates) < 4:
         mandates.append({"Mandate": "Control", "Read": "-", "Action": "Awaiting imported model"})
@@ -542,7 +609,7 @@ def render_command_deck() -> None:
           <div class="command-main">
             <div class="command-kicker">Family balance sheet command read</div>
             <div class="command-value">A${metrics.get('net_worth', 0) / 1_000_000:,.2f}m</div>
-            <div class="command-subline">{delta_prefix}{money(monthly_delta)} month-on-month. The cockpit now treats the monthly ledger as the centre of gravity, with workbook depth and price provenance one click behind the read.</div>
+            <div class="command-subline"><span class="{delta_tone}">{signed_money(monthly_delta)} month-on-month</span>. The cockpit now treats the monthly ledger as the centre of gravity, with workbook depth and price provenance one click behind the read.</div>
           </div>
           <div class="mandate-grid">
             <div class="mandate-tile"><span>{mandates[0]['Mandate']}</span><strong>{mandates[0]['Read']}</strong><p>{mandates[0]['Action']}</p></div>
@@ -558,10 +625,11 @@ def render_command_deck() -> None:
 
 def render_topline() -> None:
     metrics = summary_metrics()
+    monthly_delta = float(metrics.get("monthly_delta") or 0)
     st.markdown(
         f"""
         <div class="metric-grid">
-          <div class="mini-metric"><div class="mini-label">Net worth</div><div class="mini-value">{money(metrics.get("net_worth"))}</div><div class="mini-delta">+ {money(metrics.get("monthly_delta"))}</div></div>
+          <div class="mini-metric"><div class="mini-label">Net worth</div><div class="mini-value">{money(metrics.get("net_worth"))}</div><div class="mini-delta {tone_class(monthly_delta)}">{signed_money(monthly_delta)}</div></div>
           <div class="mini-metric"><div class="mini-label">Total assets</div><div class="mini-value">{money(metrics.get("assets"))}</div></div>
           <div class="mini-metric"><div class="mini-label">Total debt</div><div class="mini-value">{money(metrics.get("debt"))}</div></div>
           <div class="mini-metric"><div class="mini-label">Net debt</div><div class="mini-value">{money(metrics.get("net_debt"))}</div></div>
@@ -613,12 +681,12 @@ def render_overview() -> None:
         html = "<div class='change-list'>"
         for _, row in attribution.head(6).iterrows():
             value = float(row["This month"])
-            sign = "+" if value > 0 else ""
+            swing = float(row["Swing"])
             html += (
                 "<div class='change-card'>"
                 f"<div class='change-label'>{row['Driver']}</div>"
-                f"<div class='change-value'>{sign}{money(value)}</div>"
-                f"<div class='change-note'>{row['Direction']} | swing {money(row['Swing'])}</div>"
+                f"<div class='change-value {tone_class(value)}'>{signed_money(value)}</div>"
+                f"<div class='change-note'>{row['Direction']} | swing <span class='{tone_class(swing)}'>{signed_money(swing)}</span></div>"
                 "</div>"
             )
         html += "</div>"
