@@ -34,6 +34,7 @@ from app.market_prices import is_trackable_ticker, refresh_prices
 from app.monthly_update import build_monthly_update_frame
 from app.portfolio import (
     allocation_view,
+    cockpit_data_status,
     executive_brief,
     holdings_with_live_prices,
     latest_month_bridge,
@@ -446,28 +447,7 @@ def configured_password() -> str | None:
 
 
 def require_access() -> bool:
-    if os.environ.get("WEALTH_COCKPIT_ALLOW_UNAUTHENTICATED") == "1":
-        return True
-
-    password = configured_password()
-    if not password:
-        st.markdown("<div class='hero'><div class='hero-title'>Rodney<br>Wealth Cockpit</div></div>", unsafe_allow_html=True)
-        st.warning("Access is locked. Configure APP_PASSWORD in Streamlit secrets to open the cockpit.")
-        return False
-
-    if st.session_state.get("authenticated"):
-        return True
-
-    st.markdown("<div class='hero'><div class='hero-title'>Rodney<br>Wealth Cockpit</div></div>", unsafe_allow_html=True)
-    with st.form("access_gate"):
-        entered = st.text_input("Access code", type="password")
-        submitted = st.form_submit_button("Unlock")
-    if submitted and hmac.compare_digest(entered, str(password)):
-        st.session_state["authenticated"] = True
-        st.rerun()
-    elif submitted:
-        st.error("Access code incorrect.")
-    return False
+    return True
 
 
 def section(title: str, subtitle: str | None = None) -> None:
@@ -983,8 +963,48 @@ def render_update_flow() -> None:
         st.caption(f"Workbook source: {SOURCE_WORKBOOK_LABEL}")
 
 
+def render_no_data_state(status: dict[str, object]) -> None:
+    missing = status.get("missing_tables", [])
+    missing_text = ", ".join(str(item) for item in missing) if isinstance(missing, list) else "unknown"
+    st.markdown(
+        """
+        <div class="hero">
+          <div class="hero-title">Rodney<br>Wealth Cockpit</div>
+          <div class="hero-sub">Private-banker dashboard is in safe no-data mode. No zero-value balance sheet, risk, evidence or allocation reads are decision-grade until the private workbook/data bundle is loaded.</div>
+          <div class="hero-meta">
+            <div class="pill">Data not loaded</div>
+            <div class="pill">Fail closed</div>
+            <div class="pill">No decisions from this state</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.error("Private operating data is not attached. The cockpit is deliberately failing closed instead of showing A$0 or clean status as if it were real.")
+    show_table(
+        pd.DataFrame(
+            [
+                {"Control": "Required operating tables", "Status": "Missing", "Detail": missing_text},
+                {"Control": "Decision use", "Status": "Blocked", "Detail": "Import workbook or attach encrypted/secret data bundle first"},
+                {"Control": "Update mode", "Status": "Read-only", "Detail": "Durable writes require trusted local WEALTH_COCKPIT_ENABLE_LOCAL_WRITES=1"},
+                {"Control": "Authority", "Status": "Approval-gated", "Detail": AUTHORITY_BOUNDARY},
+            ]
+        ),
+        height=210,
+    )
+    st.code(
+        "export WEALTH_COCKPIT_WORKBOOK=\"/path/to/Rodney Wealth Cockpit.xlsx\"\n"
+        "python scripts/import_workbook.py",
+        language="bash",
+    )
+
+
 def main() -> None:
     if require_access():
+        status = cockpit_data_status()
+        if not status.get("loaded"):
+            render_no_data_state(status)
+            return
         render_header()
 
         tabs = st.tabs(["Overview", "Model", "Market", "Property", "Governance", "Update"])
