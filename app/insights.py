@@ -7,6 +7,8 @@ import pandas as pd
 from app.data_store import read_price_cache, read_table
 from app.portfolio import (
     allocation_view,
+    cockpit_data_loaded,
+    cockpit_data_status,
     holdings_with_live_prices,
     monthly_change_view,
     numeric,
@@ -35,6 +37,20 @@ def _pct(value: float) -> str:
 
 
 def wealth_scorecard() -> pd.DataFrame:
+    if not cockpit_data_loaded():
+        status = cockpit_data_status()
+        missing_tables = status.get("missing_tables", [])
+        missing = ", ".join(str(item) for item in missing_tables) if isinstance(missing_tables, list) else "unknown"
+        return pd.DataFrame(
+            [
+                {
+                    "Mandate": "Trust the data",
+                    "Read": "Data not loaded",
+                    "Quality": "Fail closed",
+                    "Action": f"Attach/import private workbook data before decisions. Missing: {missing}",
+                }
+            ]
+        )
     metrics = summary_metrics()
     monthly = monthly_change_view()
     allocation = allocation_view()
@@ -148,6 +164,18 @@ def monthly_attribution() -> pd.DataFrame:
 
 
 def banker_signals() -> list[Signal]:
+    if not cockpit_data_loaded():
+        status = cockpit_data_status()
+        missing_tables = status.get("missing_tables", [])
+        missing = ", ".join(str(item) for item in missing_tables) if isinstance(missing_tables, list) else "unknown"
+        return [
+            Signal(
+                "Data gate",
+                "Fail closed",
+                f"Private operating data is not loaded. Missing required tables: {missing}. Do not rely on zero-value reads, risk status, evidence counts or allocation views until the workbook/data bundle is attached.",
+                "Critical",
+            )
+        ]
     metrics = summary_metrics()
     allocation = allocation_view()
     attribution = monthly_attribution()
@@ -317,6 +345,32 @@ def property_debt_snapshot() -> pd.DataFrame:
 
 
 def update_checklist() -> pd.DataFrame:
+    if not cockpit_data_loaded():
+        status = cockpit_data_status()
+        missing_tables = status.get("missing_tables", [])
+        missing = ", ".join(str(item) for item in missing_tables) if isinstance(missing_tables, list) else "unknown"
+        return pd.DataFrame(
+            [
+                {
+                    "Step": "Private data bundle",
+                    "Owner": "Kobe",
+                    "Status": "Blocked - not loaded",
+                    "Why it matters": f"Fail closed until required tables are present: {missing}",
+                },
+                {
+                    "Step": "Monthly balance",
+                    "Owner": "Kobe",
+                    "Status": "Not decision-grade",
+                    "Why it matters": "Do not show A$0 or clean status as a real wealth position",
+                },
+                {
+                    "Step": "Workbook import",
+                    "Owner": "Kobe",
+                    "Status": "Required",
+                    "Why it matters": "Attach encrypted/secret data bundle or import the private workbook in trusted local mode",
+                },
+            ]
+        )
     evidence = read_table("evidence_register")
     decisions = read_table("decision_log")
     rows = [

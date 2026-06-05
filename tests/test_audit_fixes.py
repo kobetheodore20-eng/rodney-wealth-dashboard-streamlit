@@ -7,6 +7,7 @@ from app.monthly_update import build_monthly_update_frame
 from app import portfolio
 from app import insights
 from app.market_prices import refresh_prices
+from scripts.import_workbook import enforce_formula_fidelity
 
 
 def test_outside_tolerance_public_price_uses_explicit_workbook_fallback(monkeypatch):
@@ -41,15 +42,25 @@ def test_outside_tolerance_public_price_uses_explicit_workbook_fallback(monkeypa
     assert source.loc[source["Ticker"].eq("ABC"), "Price as of"].iloc[0] == "Workbook fallback; public price outside tolerance"
 
 
-def test_allocation_and_brief_tolerate_missing_data_bundle(monkeypatch):
+def test_allocation_and_brief_fail_closed_without_data_bundle(monkeypatch):
     monkeypatch.setattr(portfolio, "read_table", lambda name: pd.DataFrame())
+    monkeypatch.setattr(insights, "read_table", lambda name: pd.DataFrame())
 
     allocation = portfolio.allocation_view()
     brief = portfolio.executive_brief()
+    scorecard = insights.wealth_scorecard()
+    signals = insights.banker_signals()
+    risks = portfolio.risk_summary()
+    checklist = insights.update_checklist()
 
     assert "Asset class" in allocation.columns
     assert allocation.empty
-    assert brief[0]["title"] == "Chief Read"
+    assert brief[0]["status"] == "Fail closed"
+    assert scorecard.loc[0, "Read"] == "Data not loaded"
+    assert scorecard.loc[0, "Quality"] == "Fail closed"
+    assert signals[0].status == "Fail closed"
+    assert "Data not loaded" in risks.loc[0, "Status"]
+    assert checklist.loc[0, "Status"] == "Blocked - not loaded"
 
 
 def test_stale_cached_price_is_not_reported_as_fresh_public(monkeypatch):
@@ -173,3 +184,98 @@ def test_monthly_attribution_sorts_by_absolute_current_impact(monkeypatch):
     assert result.loc[0, "Driver"] == "Shares"
     assert result.loc[0, "This month"] == 60
     assert result.loc[1, "Driver"] == "Crypto"
+
+
+def test_malformed_required_tables_fail_closed(monkeypatch):
+    junk = pd.DataFrame([{"Wrong": "not a model"}])
+    monkeypatch.setattr(portfolio, "read_table", lambda name: junk)
+    monkeypatch.setattr(insights, "read_table", lambda name: junk)
+
+    status = portfolio.cockpit_data_status()
+    brief = portfolio.executive_brief()
+    risks = portfolio.risk_summary()
+    scorecard = insights.wealth_scorecard()
+
+    assert status["loaded"] is False
+    assert "monthly_tracking" in status["invalid_tables"]
+    assert "balance_sheet" in status["invalid_tables"]
+    assert brief[0]["status"] == "Fail closed"
+    assert "Data not loaded" in risks.loc[0, "Status"]
+    assert scorecard.loc[0, "Quality"] == "Fail closed"
+
+
+def test_usd_holding_blocks_aud_valuation_when_fx_missing(monkeypatch):
+    holdings = pd.DataFrame(
+        [
+            {
+                "Ticker": "GOOG",
+                "Currency": "USD",
+                "Shares": 2,
+                "Equity / value native": 200,
+                "Profit / loss native": 20,
+                "Source": "workbook",
+            }
+        ]
+    )
+    monkeypatch.setattr(portfolio, "read_table", lambda name: holdings if name == "listed_share_snapshot" else pd.DataFrame())
+    monkeypatch.setattr(portfolio, "read_price_cache", lambda: {"prices": {"GOOG": {"price": 110, "source": "test feed"}}, "fx": {}})
+
+    result = portfolio.holdings_with_live_prices()
+    sources = portfolio.price_source_view()
+
+    assert result.loc[0, "Live price"] == 110
+    assert pd.isna(result.loc[0, "Live value AUD"])
+    assert pd.isna(result.loc[0, "Cost base AUD"])
+    assert result.loc[0, "Provenance status"] == "fx_unavailable_usd_aud"
+    assert result.loc[0, "Price basis"] == "FX unavailable - AUD value blocked"
+    assert sources.loc[sources["Ticker"].eq("USD/AUD"), "Provenance status"].iloc[0] == "fx_unavailable"
+
+
+def test_monthly_update_updates_balance_sheet_core_rows_atomically():
+    from app.monthly_update import apply_monthly_row_to_balance_sheet
+
+    balance = pd.DataFrame(
+        [
+            {"Asset class": "Cash / offsets", "Current value": 100, "Target base": 0.2},
+            {"Asset class": "Property equity", "Current value": 400, "Target base": 0.5},
+            {"Asset class": "Crypto", "Current value": 10, "Target base": 0.05},
+            {"Asset class": "Shares", "Current value": 20, "Target base": 0.15},
+            {"Asset class": "Super", "Current value": 30, "Target base": 0.15},
+            {"Asset class": "TOTAL DEBT", "Current value": 100, "Target base": ""},
+            {"Asset class": "TOTAL ASSETS", "Current value": 660, "Target base": ""},
+            {"Asset class": "NET DEBT", "Current value": 0, "Target base": ""},
+            {"Asset class": "NET WORTH", "Current value": 560, "Target base": ""},
+        ]
+    )
+    new_row = {
+        "Cash / offsets": 120,
+        "Property equity": 380,
+        "Crypto": 15,
+        "Shares": 40,
+        "Super": 45,
+        "Total debt": 120,
+        "Total assets": 720,
+        "Net debt": 0,
+        "Net worth": 600,
+    }
+
+    result = apply_monthly_row_to_balance_sheet(balance, new_row)
+    lookup = result.set_index("Asset class")["Current value"]
+
+    assert lookup["Cash / offsets"] == 120
+    assert lookup["Property equity"] == 380
+    assert lookup["Shares"] == 40
+    assert lookup["TOTAL DEBT"] == 120
+    assert lookup["TOTAL ASSETS"] == 720
+    assert lookup["NET WORTH"] == 600
+    assert result.loc[result["Asset class"].eq("NET WORTH"), "Notes"].iloc[0] == "Updated atomically from monthly update row"
+
+
+def test_formula_fidelity_blocks_operating_sheet_with_blank_formula_cache():
+    audit = {
+        "01 Executive Dashboard": {"Formula cached blanks": 0},
+        "13 Monthly Tracking": {"Formula cached blanks": 2},
+    }
+
+    with pytest.raises(ValueError, match="13 Monthly Tracking"):
+        enforce_formula_fidelity(audit)

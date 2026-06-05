@@ -71,6 +71,12 @@ def fetch_usd_aud() -> dict[str, object]:
     response.raise_for_status()
     payload = response.json()
     rate = payload.get("rates", {}).get("AUD")
+    try:
+        rate = float(rate)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("No usable USD/AUD public FX rate returned") from exc
+    if rate <= 0:
+        raise ValueError("No usable USD/AUD public FX rate returned")
     return {
         "pair": "USD/AUD",
         "rate": rate,

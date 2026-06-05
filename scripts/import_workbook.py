@@ -85,10 +85,13 @@ def read_sheet_table(sheet_name: str, header_marker: str) -> pd.DataFrame:
 
 
 def formula_audit() -> dict[str, dict[str, object]]:
-    workbook = load_workbook(SOURCE_WORKBOOK, read_only=True, data_only=False)
+    formula_workbook = load_workbook(SOURCE_WORKBOOK, read_only=True, data_only=False)
+    value_workbook = load_workbook(SOURCE_WORKBOOK, read_only=True, data_only=True)
     audit: dict[str, dict[str, object]] = {}
-    for worksheet in workbook.worksheets:
+    for worksheet in formula_workbook.worksheets:
+        value_sheet = value_workbook[worksheet.title]
         formula_cells = 0
+        cached_formula_blanks = 0
         populated_cells = 0
         for row in worksheet.iter_rows():
             for cell in row:
@@ -96,13 +99,36 @@ def formula_audit() -> dict[str, dict[str, object]]:
                     populated_cells += 1
                 if cell.data_type == "f":
                     formula_cells += 1
+                    cached_value = value_sheet[cell.coordinate].value
+                    if cached_value in (None, ""):
+                        cached_formula_blanks += 1
+        if not formula_cells:
+            fidelity = "No formulas detected"
+        elif cached_formula_blanks:
+            fidelity = "Formula cache incomplete - open/recalculate in Excel before import"
+        else:
+            fidelity = "Decision-grade cached formula values"
         audit[worksheet.title] = {
             "Formula cells": formula_cells,
+            "Formula cached blanks": cached_formula_blanks,
             "Populated cells": populated_cells,
-            "Formula fidelity": "CSV cached values only; formulas not recalculated" if formula_cells else "No formulas detected",
+            "Formula fidelity": fidelity,
         }
-    workbook.close()
+    formula_workbook.close()
+    value_workbook.close()
     return audit
+
+
+def enforce_formula_fidelity(audit: dict[str, dict[str, object]]) -> None:
+    operating_sheets = {sheet_name for sheet_name, _header_marker in SHEETS.values()}
+    incomplete = [
+        sheet
+        for sheet in sorted(operating_sheets)
+        if int(audit.get(sheet, {}).get("Formula cached blanks", 0) or 0) > 0
+    ]
+    if incomplete:
+        joined = ", ".join(incomplete)
+        raise ValueError(f"Workbook formula cache incomplete for operating sheets: {joined}. Open/recalculate in Excel before import.")
 
 
 def main() -> None:
@@ -113,6 +139,7 @@ def main() -> None:
     sheet_index = []
     workbook = pd.ExcelFile(SOURCE_WORKBOOK)
     audit = formula_audit()
+    enforce_formula_fidelity(audit)
     for sheet_name in workbook.sheet_names:
         output_name = f"workbook_{slugify(sheet_name)}"
         frame = read_raw_sheet(sheet_name)

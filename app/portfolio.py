@@ -9,10 +9,135 @@ from app.market_prices import is_trackable_ticker
 
 PRICE_TOLERANCE_LOW = 0.5
 PRICE_TOLERANCE_HIGH = 1.5
+CORE_BALANCE_ROWS = {"Cash / offsets", "Property equity", "Crypto", "Shares", "Super"}
+REQUIRED_OPERATING_TABLES = (
+    "monthly_tracking",
+    "balance_sheet",
+    "property_register",
+    "loan_offset_register",
+    "investment_register",
+    "decision_log",
+    "evidence_register",
+)
+OPERATING_TABLE_SCHEMA = {
+    "monthly_tracking": {
+        "required_columns": {
+            "Date",
+            "Cash / offsets",
+            "Property value",
+            "Property equity",
+            "Crypto",
+            "Shares",
+            "Super",
+            "Total assets",
+            "Total debt",
+            "Net debt",
+            "Net worth",
+        },
+        "numeric_columns": {
+            "Cash / offsets",
+            "Property value",
+            "Property equity",
+            "Crypto",
+            "Shares",
+            "Super",
+            "Total assets",
+            "Total debt",
+            "Net debt",
+            "Net worth",
+        },
+    },
+    "balance_sheet": {
+        "required_columns": {"Asset class", "Current value"},
+        "required_asset_classes": CORE_BALANCE_ROWS,
+        "numeric_by_asset_class": CORE_BALANCE_ROWS,
+    },
+    "property_register": {"required_columns": {"Property", "Value", "Loan", "Offset"}, "numeric_columns": {"Value", "Loan", "Offset"}},
+    "loan_offset_register": {"required_columns": {"Property", "Loan balance", "Offset balance", "Rate"}, "numeric_columns": {"Loan balance", "Offset balance"}},
+    "investment_register": {"required_columns": {"Asset / sleeve", "Category", "Value AUD"}, "numeric_columns": {"Value AUD"}},
+    "decision_log": {"required_columns": {"Decision ID", "Approval status"}},
+    "evidence_register": {"required_columns": {"Evidence ID", "Status"}},
+}
 
 
 def numeric(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce").fillna(0)
+
+
+def _validate_operating_table(name: str, frame: pd.DataFrame) -> list[str]:
+    schema = OPERATING_TABLE_SCHEMA.get(name, {})
+    issues: list[str] = []
+    if frame.empty:
+        return ["table is empty"]
+
+    required_columns = set(schema.get("required_columns", set()))
+    missing_columns = sorted(required_columns.difference(frame.columns))
+    if missing_columns:
+        issues.append(f"missing columns: {', '.join(missing_columns)}")
+
+    numeric_columns = set(schema.get("numeric_columns", set())).intersection(frame.columns)
+    for col in sorted(numeric_columns):
+        values = pd.to_numeric(frame[col], errors="coerce")
+        if values.notna().sum() == 0:
+            issues.append(f"no numeric values in {col}")
+
+    required_asset_classes = set(schema.get("required_asset_classes", set()))
+    if required_asset_classes and "Asset class" in frame:
+        present = set(frame["Asset class"].astype(str))
+        missing_assets = sorted(required_asset_classes.difference(present))
+        if missing_assets:
+            issues.append(f"missing asset classes: {', '.join(missing_assets)}")
+
+    numeric_by_asset_class = set(schema.get("numeric_by_asset_class", set()))
+    if numeric_by_asset_class and {"Asset class", "Current value"}.issubset(frame.columns):
+        core = frame[frame["Asset class"].astype(str).isin(numeric_by_asset_class)]
+        values = pd.to_numeric(core["Current value"], errors="coerce")
+        if len(core) < len(numeric_by_asset_class) or values.notna().sum() < len(numeric_by_asset_class):
+            issues.append("core asset rows need numeric Current value")
+    return issues
+
+
+def _valid_fx_rate(cache: dict[str, object], pair: str = "USD_AUD") -> float | None:
+    fx = cache.get("fx", {}) if isinstance(cache, dict) else {}
+    entry = fx.get(pair, {}) if isinstance(fx, dict) else {}
+    raw_rate = entry.get("rate")
+    if raw_rate is None:
+        return None
+    try:
+        rate = float(raw_rate)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(rate) or rate <= 0:
+        return None
+    return rate
+
+
+def cockpit_data_status() -> dict[str, object]:
+    """Return a fail-closed operating data status for the private wealth cockpit."""
+    tables: dict[str, bool] = {}
+    missing: list[str] = []
+    invalid: dict[str, list[str]] = {}
+    for name in REQUIRED_OPERATING_TABLES:
+        frame = read_table(name)
+        if frame.empty:
+            tables[name] = False
+            missing.append(name)
+            continue
+        issues = _validate_operating_table(name, frame)
+        tables[name] = not issues
+        if issues:
+            invalid[name] = issues
+    return {
+        "loaded": not missing and not invalid,
+        "missing_tables": missing,
+        "invalid_tables": invalid,
+        "tables": tables,
+        "required_tables": list(REQUIRED_OPERATING_TABLES),
+    }
+
+
+def cockpit_data_loaded() -> bool:
+    return bool(cockpit_data_status()["loaded"])
 
 
 def current_balance_sheet() -> pd.DataFrame:
@@ -161,19 +286,19 @@ def price_source_view() -> pd.DataFrame:
             }
         )
     fx = cache.get("fx", {}).get("USD_AUD", {})
-    if fx:
-        rows.append(
-            {
-                "Ticker": "USD/AUD",
-                "Symbol": "USD/AUD",
-                "Currency": "FX",
-                "Price used": fx.get("rate"),
-                "Price as of": fx.get("source_time") or cache.get("updated_at"),
-                "Provenance status": cache.get("refresh", {}).get("fx_status") or "fx_cached",
-                "Tolerance check": "Not applicable",
-                "Source": fx.get("source", "FX source"),
-            }
-        )
+    fx_rate = _valid_fx_rate(cache)
+    rows.append(
+        {
+            "Ticker": "USD/AUD",
+            "Symbol": "USD/AUD",
+            "Currency": "FX",
+            "Price used": fx_rate,
+            "Price as of": fx.get("source_time") or cache.get("updated_at") or "FX unavailable",
+            "Provenance status": cache.get("refresh", {}).get("fx_status") or ("fx_cached" if fx_rate else "fx_unavailable"),
+            "Tolerance check": "Not applicable" if fx_rate else "Missing/invalid USD/AUD rate",
+            "Source": fx.get("source", "FX source") if fx_rate else "No usable FX source",
+        }
+    )
     return pd.DataFrame(rows)
 
 
@@ -205,6 +330,16 @@ def allocation_view() -> pd.DataFrame:
 
 
 def risk_summary() -> pd.DataFrame:
+    if not cockpit_data_loaded():
+        return pd.DataFrame(
+            [
+                {
+                    "Metric": "Operating data bundle",
+                    "Current": pd.NA,
+                    "Status": "Data not loaded - fail closed",
+                }
+            ]
+        )
     metrics = summary_metrics()
     allocation = allocation_view()
     values = {
@@ -232,6 +367,29 @@ def risk_summary() -> pd.DataFrame:
 
 
 def executive_brief() -> list[dict[str, str]]:
+    if not cockpit_data_loaded():
+        return [
+            {
+                "title": "Data gate",
+                "status": "Fail closed",
+                "body": "Private workbook/data bundle is not loaded. The cockpit must not display zero-value reads as a real wealth position.",
+            },
+            {
+                "title": "Operating state",
+                "status": "Not decision-grade",
+                "body": "Import the private workbook snapshot or attach the encrypted/secret data bundle before using any allocation, risk, market or monthly movement read.",
+            },
+            {
+                "title": "Update safety",
+                "status": "Read-only until trusted local mode",
+                "body": "Deployed sessions can preview monthly rows only; durable writes require WEALTH_COCKPIT_ENABLE_LOCAL_WRITES=1 in a trusted local workspace.",
+            },
+            {
+                "title": "Authority boundary",
+                "status": "Approval-gated",
+                "body": "No trades, refinancing, capital movement, broker contact or third-party instruction can be taken from an unloaded cockpit.",
+            },
+        ]
     metrics = summary_metrics()
     allocation = allocation_view()
     risks = risk_summary()
@@ -320,7 +478,7 @@ def holdings_with_live_prices() -> pd.DataFrame:
 
     cache = read_price_cache()
     price_map = cache.get("prices", {})
-    usd_aud = cache.get("fx", {}).get("USD_AUD", {}).get("rate") or 1
+    usd_aud = _valid_fx_rate(cache)
     holdings["Shares"] = numeric(holdings.get("Shares", pd.Series(dtype=float)))
     value_col = "Equity / value native" if "Equity / value native" in holdings else "Equity"
     pl_col = "Profit / loss native" if "Profit / loss native" in holdings else "Profit / loss"
@@ -363,19 +521,27 @@ def holdings_with_live_prices() -> pd.DataFrame:
             basis = "Workbook fallback"
             tolerance_check = "No shares"
             provenance_status = "workbook_fallback_no_shares"
+        if currency == "USD" and usd_aud is None:
+            basis = "FX unavailable - AUD value blocked"
+            tolerance_check = "Missing/invalid USD/AUD rate"
+            provenance_status = "fx_unavailable_usd_aud"
         live_prices.append(price)
         price_basis.append(basis)
         tolerance_checks.append(tolerance_check)
         provenance_statuses.append(provenance_status)
-        if price:
+        if currency == "USD" and usd_aud is None:
+            live_values_aud.append(pd.NA)
+        elif price:
             value = float(row["Shares"]) * float(price)
             if currency == "USD":
-                value *= float(usd_aud)
+                assert usd_aud is not None
+                value *= usd_aud
             live_values_aud.append(value)
         else:
             value = float(row["Native value"])
             if currency == "USD":
-                value *= float(usd_aud)
+                assert usd_aud is not None
+                value *= usd_aud
             live_values_aud.append(value)
 
     holdings["Live price"] = live_prices
@@ -386,6 +552,10 @@ def holdings_with_live_prices() -> pd.DataFrame:
     holdings["Provenance status"] = provenance_statuses
     holdings["Live value AUD"] = live_values_aud
     holdings["Cost base AUD"] = holdings["Implied cost base native"]
-    holdings.loc[holdings["Currency"].astype(str).str.upper().eq("USD"), "Cost base AUD"] *= float(usd_aud)
+    usd_mask = holdings["Currency"].astype(str).str.upper().eq("USD")
+    if usd_aud is None:
+        holdings.loc[usd_mask, "Cost base AUD"] = pd.NA
+    else:
+        holdings.loc[usd_mask, "Cost base AUD"] *= usd_aud
     holdings["Live P/L AUD"] = holdings["Live value AUD"] - holdings["Cost base AUD"]
     return holdings
