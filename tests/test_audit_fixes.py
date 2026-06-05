@@ -1,13 +1,25 @@
 from __future__ import annotations
 
+import base64
+import io
+import zipfile
+
 import pytest
 import pandas as pd
 
 from app.monthly_update import build_monthly_update_frame
 from app import portfolio
 from app import insights
+from app import data_store
 from app.market_prices import refresh_prices
 from scripts.import_workbook import enforce_formula_fidelity
+
+
+def zipped_csv_b64(name: str, csv_text: str) -> str:
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, "w") as bundle:
+        bundle.writestr(f"{name}.csv", csv_text)
+    return base64.b64encode(payload.getvalue()).decode("ascii")
 
 
 def test_outside_tolerance_public_price_uses_explicit_workbook_fallback(monkeypatch):
@@ -61,6 +73,38 @@ def test_allocation_and_brief_fail_closed_without_data_bundle(monkeypatch):
     assert signals[0].status == "Fail closed"
     assert "Data not loaded" in risks.loc[0, "Status"]
     assert checklist.loc[0, "Status"] == "Blocked - not loaded"
+
+
+def test_read_table_prefers_encrypted_bundle_over_stale_secret(monkeypatch, tmp_path):
+    monkeypatch.setattr(data_store, "DATA_DIR", tmp_path)
+
+    def bundle_with(value: str) -> zipfile.ZipFile:
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as bundle:
+            bundle.writestr("asset.csv", f"source,value\n{value},1\n")
+        return zipfile.ZipFile(io.BytesIO(payload.getvalue()))
+
+    monkeypatch.setattr(data_store, "encrypted_data_bundle", lambda: bundle_with("encrypted"))
+    monkeypatch.setattr(data_store, "secret_data_bundle", lambda: bundle_with("stale-secret"))
+
+    result = data_store.read_table("asset")
+
+    assert result.loc[0, "source"] == "encrypted"
+
+
+def test_read_table_falls_back_to_secret_when_encrypted_bundle_is_invalid(monkeypatch, tmp_path):
+    from cryptography.fernet import Fernet
+
+    invalid_bundle_path = tmp_path / "data_bundle.enc"
+    invalid_bundle_path.write_bytes(b"not a valid encrypted bundle")
+    monkeypatch.setattr(data_store, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(data_store, "ENCRYPTED_DATA_BUNDLE_PATH", invalid_bundle_path)
+    monkeypatch.setenv("WEALTH_COCKPIT_DATA_BUNDLE_KEY", Fernet.generate_key().decode("ascii"))
+    monkeypatch.setenv("WEALTH_COCKPIT_DATA_BUNDLE_B64", zipped_csv_b64("asset", "source,value\nsecret,1\n"))
+
+    result = data_store.read_table("asset")
+
+    assert result.loc[0, "source"] == "secret"
 
 
 def test_stale_cached_price_is_not_reported_as_fresh_public(monkeypatch):

@@ -38,10 +38,17 @@ def encrypted_data_bundle() -> zipfile.ZipFile | None:
     if not key:
         return None
 
-    from cryptography.fernet import Fernet
+    try:
+        from cryptography.fernet import Fernet
 
-    payload = Fernet(str(key).encode("utf-8")).decrypt(ENCRYPTED_DATA_BUNDLE_PATH.read_bytes())
-    return zipfile.ZipFile(io.BytesIO(payload))
+        payload = Fernet(str(key).encode("utf-8")).decrypt(ENCRYPTED_DATA_BUNDLE_PATH.read_bytes())
+        return zipfile.ZipFile(io.BytesIO(payload))
+    except Exception:  # noqa: BLE001 - fall back to secret bundle when repo bundle is unavailable.
+        return None
+
+
+def data_bundle() -> zipfile.ZipFile | None:
+    return encrypted_data_bundle() or secret_data_bundle()
 
 
 def read_table(name: str) -> pd.DataFrame:
@@ -52,7 +59,7 @@ def read_table(name: str) -> pd.DataFrame:
         except EmptyDataError:
             return pd.DataFrame()
 
-    bundle = secret_data_bundle() or encrypted_data_bundle()
+    bundle = data_bundle()
     member = f"{name}.csv"
     if not bundle or member not in bundle.namelist():
         return pd.DataFrame()
@@ -74,7 +81,7 @@ def local_writes_enabled() -> bool:
 
 def read_json(path: Path, default: Any) -> Any:
     if not path.exists():
-        bundle = secret_data_bundle() or encrypted_data_bundle()
+        bundle = data_bundle()
         if bundle and path.name in bundle.namelist():
             with bundle.open(path.name) as handle:
                 return json.load(handle)
