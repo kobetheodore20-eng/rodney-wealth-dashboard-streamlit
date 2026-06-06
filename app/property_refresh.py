@@ -7,7 +7,12 @@ import pandas as pd
 import requests
 
 from app.data_store import read_json, read_table, write_json
-from app.config import PROPERTY_REFRESH_CACHE_PATH
+try:
+    from app.config import PROPERTY_REFRESH_CACHE_PATH
+except ImportError:  # Streamlit Cloud can briefly run mixed module versions during rebuild.
+    from app.config import DATA_DIR
+
+    PROPERTY_REFRESH_CACHE_PATH = DATA_DIR / "property_refresh_cache.json"
 
 
 PROPERTY_SOURCE_URLS = {
