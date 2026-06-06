@@ -15,6 +15,7 @@ SOURCE_WORKBOOK_LABEL = os.environ.get(
 )
 
 PRICE_CACHE_PATH = DATA_DIR / "prices_cache.json"
+PROPERTY_REFRESH_CACHE_PATH = DATA_DIR / "property_refresh_cache.json"
 ENCRYPTED_DATA_BUNDLE_PATH = PROJECT_ROOT / "data_bundle.enc"
 
 AUTHORITY_BOUNDARY = (

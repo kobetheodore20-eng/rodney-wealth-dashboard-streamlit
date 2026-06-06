@@ -23,6 +23,8 @@ TICKER_MAP = {
     "NVDA": "NVDA",
     "PLTR": "PLTR",
     "BTC": "BTC-AUD",
+    "BTC_AUD": "BTC-AUD",
+    "BTC_USD": "BTC-USD",
 }
 
 INVALID_TICKERS = {"", "AUD", "USD", "AUD EQUIVALENT", "NATIVE CURRENCY", "TOTAL", "NAN"}
@@ -149,6 +151,32 @@ def refresh_prices(tickers: Iterable[str]) -> dict[str, object]:
         "errors": errors,
         "provenance": provenance,
         "refresh": refresh,
+    }
+    save_price_cache(cache)
+    return cache
+
+
+def refresh_bitcoin_prices() -> dict[str, object]:
+    cache = read_price_cache()
+    crypto = cache.get("crypto", {})
+    errors = cache.get("errors", {}).copy()
+    refreshed = 0
+    for key, symbol in {"BTC_AUD": "BTC-AUD", "BTC_USD": "BTC-USD"}.items():
+        try:
+            crypto[key] = fetch_yahoo_price(symbol)
+            refreshed += 1
+            errors.pop(key, None)
+        except Exception as exc:  # noqa: BLE001 - displayed in UI.
+            errors[key] = str(exc)
+            if key not in crypto:
+                crypto[key] = {"symbol": symbol, "price": None, "source": "Unavailable"}
+    cache["crypto"] = crypto
+    cache["errors"] = errors
+    cache["crypto_refresh"] = {
+        "requested": 2,
+        "public_refreshed": refreshed,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "source": "Yahoo Finance chart endpoint",
     }
     save_price_cache(cache)
     return cache

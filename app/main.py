@@ -30,7 +30,7 @@ from app.insights import (
     wealth_scorecard,
     workbook_coverage,
 )
-from app.market_prices import is_trackable_ticker, refresh_prices
+from app.market_prices import is_trackable_ticker, refresh_bitcoin_prices, refresh_prices
 from app.monthly_update import build_monthly_update_frame
 from app.portfolio import (
     allocation_view,
@@ -45,6 +45,7 @@ from app.portfolio import (
     stress_view,
     summary_metrics,
 )
+from app.property_refresh import property_refresh_view, refresh_property_estimates
 
 
 st.set_page_config(page_title="Rodney Wealth Cockpit", page_icon="RW", layout="wide")
@@ -856,6 +857,65 @@ def render_market_tape() -> None:
         with st.expander("Public feed gaps", expanded=False):
             st.write(cache["errors"])
 
+    crypto_cache = cache.get("crypto", {}) if isinstance(cache, dict) else {}
+    investments = read_table("investment_register")
+    btc_row = pd.DataFrame()
+    if not investments.empty:
+        category = investments.get("Category", pd.Series("", index=investments.index)).astype(str).str.lower()
+        sleeve = investments.get("Asset / sleeve", pd.Series("", index=investments.index)).astype(str).str.lower()
+        btc_row = investments[category.eq("crypto") | sleeve.str.contains("btc", na=False)]
+
+    with st.expander("Bitcoin AUD/USD refresh", expanded=False):
+        b1, b2 = st.columns([0.7, 1.3])
+        if b1.button("Refresh Bitcoin", width="stretch"):
+            with st.spinner("Refreshing BTC-AUD and BTC-USD..."):
+                cache = refresh_bitcoin_prices()
+                crypto_cache = cache.get("crypto", {})
+            crypto_refresh = cache.get("crypto_refresh", {})
+            st.success(
+                f"Bitcoin refreshed: {crypto_refresh.get('public_refreshed', 0)} of "
+                f"{crypto_refresh.get('requested', 2)} public feeds updated."
+            )
+        b2.caption(f"Bitcoin refresh run: {cache.get('crypto_refresh', {}).get('updated_at') or 'Not refreshed yet'}")
+
+        btc_units = pd.NA
+        workbook_value = pd.NA
+        if not btc_row.empty:
+            btc_units = pd.to_numeric(btc_row.iloc[0].get("Units"), errors="coerce")
+            workbook_value = pd.to_numeric(btc_row.iloc[0].get("Value AUD"), errors="coerce")
+        btc_aud = crypto_cache.get("BTC_AUD", {})
+        btc_usd = crypto_cache.get("BTC_USD", {})
+        btc_aud_price = pd.to_numeric(pd.Series([btc_aud.get("price")]), errors="coerce").iloc[0]
+        btc_usd_price = pd.to_numeric(pd.Series([btc_usd.get("price")]), errors="coerce").iloc[0]
+        btc_units_number = pd.to_numeric(pd.Series([btc_units]), errors="coerce").iloc[0]
+        bitcoin_display = pd.DataFrame(
+            [
+                {
+                    "Feed": "BTC-AUD",
+                    "Price": btc_aud_price,
+                    "Currency": btc_aud.get("currency", "AUD"),
+                    "BTC units": btc_units_number,
+                    "Live value AUD": btc_aud_price * btc_units_number if pd.notna(btc_aud_price) and pd.notna(btc_units_number) else pd.NA,
+                    "Live value USD": pd.NA,
+                    "Workbook value AUD": workbook_value,
+                    "Source": btc_aud.get("source", ""),
+                    "Fetched at": btc_aud.get("fetched_at", ""),
+                },
+                {
+                    "Feed": "BTC-USD",
+                    "Price": btc_usd_price,
+                    "Currency": btc_usd.get("currency", "USD"),
+                    "BTC units": btc_units_number,
+                    "Live value AUD": pd.NA,
+                    "Live value USD": btc_usd_price * btc_units_number if pd.notna(btc_usd_price) and pd.notna(btc_units_number) else pd.NA,
+                    "Workbook value AUD": workbook_value,
+                    "Source": btc_usd.get("source", ""),
+                    "Fetched at": btc_usd.get("fetched_at", ""),
+                },
+            ]
+        )
+        show_table(bitcoin_display, height=180)
+
     if not price_sources.empty:
         statuses = price_sources.get("Provenance status", pd.Series(dtype=str)).astype(str)
         public_sources = price_sources[statuses.eq("public_price_used")]
@@ -919,6 +979,16 @@ def render_property_and_debt() -> None:
         c3.metric("Offsets", money(props["Offset"].sum()))
         c4.metric("Net property debt", money(props["Net debt after offset"].sum()))
         show_table(props, height=260, percent_cols=["Gross LVR", "Net LVR", "Gross yield"])
+
+    with st.expander("Property estimate refresh", expanded=False):
+        st.caption("Property portal refresh attempts configured public source pages. If a source blocks server-side requests or returns no structured estimate, cockpit values are retained.")
+        p1, p2 = st.columns([0.7, 1.3])
+        if p1.button("Refresh property estimates", width="stretch"):
+            with st.spinner("Refreshing configured public property sources..."):
+                refresh_property_estimates()
+            st.success("Property refresh completed. Review status by property before applying any valuation changes.")
+        p2.caption("Separate from the market tape. This does not rewrite monthly tracking or the workbook.")
+        show_table(property_refresh_view(), height=260)
 
     tabs = st.tabs(["Register", "Loans", "P&L", "Keith", "Keith coverage", "Controls"])
     with tabs[0]:

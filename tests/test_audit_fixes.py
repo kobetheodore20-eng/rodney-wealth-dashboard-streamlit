@@ -6,7 +6,7 @@ import pandas as pd
 from app.monthly_update import build_monthly_update_frame, normalize_monthly_property_base
 from app import portfolio
 from app import insights
-from app.market_prices import refresh_prices
+from app.market_prices import refresh_bitcoin_prices, refresh_prices
 from scripts.import_workbook import enforce_formula_fidelity
 
 
@@ -208,6 +208,49 @@ def test_refresh_prices_reports_unique_counts_and_stale_cache(monkeypatch):
     assert result["refresh"]["public_refreshed"] == 0
     assert result["refresh"]["stale_cache"] == 1
     assert result["provenance"]["ABC"]["status"] == "stale_cache_after_refresh_error"
+
+
+def test_refresh_bitcoin_prices_stores_aud_and_usd(monkeypatch):
+    saved = {}
+    monkeypatch.setattr("app.market_prices.read_price_cache", lambda: {"prices": {}, "fx": {}, "errors": {"BTC_AUD": "old"}})
+    monkeypatch.setattr(
+        "app.market_prices.fetch_yahoo_price",
+        lambda symbol: {"symbol": symbol, "price": 100 if symbol == "BTC-AUD" else 70, "currency": symbol[-3:], "source": "test"},
+    )
+    monkeypatch.setattr("app.market_prices.save_price_cache", lambda cache: saved.update(cache))
+
+    result = refresh_bitcoin_prices()
+
+    assert result["crypto"]["BTC_AUD"]["symbol"] == "BTC-AUD"
+    assert result["crypto"]["BTC_USD"]["symbol"] == "BTC-USD"
+    assert result["crypto_refresh"]["public_refreshed"] == 2
+    assert "BTC_AUD" not in result["errors"]
+    assert saved["crypto"]["BTC_USD"]["price"] == 70
+
+
+def test_property_refresh_retains_cockpit_value_when_public_source_blocked(monkeypatch):
+    from app import property_refresh
+
+    written = {}
+    props = pd.DataFrame(
+        [
+            {"Property": "25 Keith St", "Value": 3_451_000},
+            {"Property": "TOTAL", "Value": 3_451_000},
+        ]
+    )
+    monkeypatch.setattr(property_refresh, "read_table", lambda name: props if name == "property_register" else pd.DataFrame())
+    monkeypatch.setattr(property_refresh, "read_json", lambda path, default: {"properties": {}, "updated_at": None})
+    monkeypatch.setattr(property_refresh, "write_json", lambda path, payload: written.update(payload))
+    monkeypatch.setattr(property_refresh, "fetch_property_estimate", lambda url: (_ for _ in ()).throw(RuntimeError("Source blocked server-side request with HTTP 429")))
+
+    result = property_refresh.refresh_property_estimates()
+    row = result["rows"][0]
+
+    assert row["Cockpit value"] == 3_451_000
+    assert pd.isna(row["Refreshed value"])
+    assert row["Action"] == "Retained cockpit value"
+    assert "HTTP 429" in row["Status"]
+    assert written["rows"][0]["Cockpit value"] == 3_451_000
 
 
 def test_monthly_attribution_sorts_by_absolute_current_impact(monkeypatch):
