@@ -4,6 +4,7 @@ import hmac
 import importlib
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -30,7 +31,7 @@ from app.insights import (
     wealth_scorecard,
     workbook_coverage,
 )
-from app.market_prices import is_trackable_ticker, refresh_bitcoin_prices, refresh_prices
+from app.market_prices import is_trackable_ticker, refresh_prices
 from app.monthly_update import build_monthly_update_frame
 from app.portfolio import (
     allocation_view,
@@ -49,6 +50,36 @@ from app.property_refresh import property_refresh_view, refresh_property_estimat
 
 
 st.set_page_config(page_title="Rodney Wealth Cockpit", page_icon="RW", layout="wide")
+
+
+def refresh_bitcoin_prices() -> dict[str, object]:
+    market_prices = importlib.import_module("app.market_prices")
+    if hasattr(market_prices, "refresh_bitcoin_prices"):
+        return market_prices.refresh_bitcoin_prices()
+
+    cache = read_price_cache()
+    crypto = cache.get("crypto", {})
+    errors = cache.get("errors", {}).copy()
+    refreshed = 0
+    for key, symbol in {"BTC_AUD": "BTC-AUD", "BTC_USD": "BTC-USD"}.items():
+        try:
+            crypto[key] = market_prices.fetch_yahoo_price(symbol)
+            refreshed += 1
+            errors.pop(key, None)
+        except Exception as exc:  # noqa: BLE001 - displayed in UI.
+            errors[key] = str(exc)
+            if key not in crypto:
+                crypto[key] = {"symbol": symbol, "price": None, "source": "Unavailable"}
+    cache["crypto"] = crypto
+    cache["errors"] = errors
+    cache["crypto_refresh"] = {
+        "requested": 2,
+        "public_refreshed": refreshed,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "source": "Yahoo Finance chart endpoint",
+    }
+    data_store.save_price_cache(cache)
+    return cache
 
 st.markdown(
     """
