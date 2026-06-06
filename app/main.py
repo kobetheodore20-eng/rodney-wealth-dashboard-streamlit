@@ -425,6 +425,82 @@ st.markdown(
     .stTabs [data-baseweb="tab-border"] {
       background-color: var(--hairline) !important;
     }
+    div[role="radiogroup"] {
+      gap: 8px;
+      align-items: stretch;
+    }
+    div[role="radiogroup"] label {
+      border: 1px solid var(--hairline);
+      background: rgba(255,255,255,0.70);
+      border-radius: 999px;
+      padding: 7px 12px;
+      min-height: 38px;
+      justify-content: center;
+    }
+    div[role="radiogroup"] label:has(input:checked) {
+      background: #151515;
+      color: white;
+      border-color: #151515;
+    }
+    div[role="radiogroup"] label:has(input:checked) * {
+      color: white !important;
+    }
+    .refresh-panel {
+      border: 1px solid var(--hairline);
+      background: rgba(255,255,255,0.78);
+      border-radius: 8px;
+      padding: 14px;
+      margin: 10px 0 14px;
+      box-shadow: 0 18px 45px rgba(0,0,0,0.035);
+    }
+    .refresh-title {
+      color: var(--ink);
+      font-weight: 620;
+      font-size: 1rem;
+      margin-bottom: 5px;
+    }
+    .refresh-note {
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.4;
+      margin-bottom: 10px;
+    }
+    .mobile-card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 10px 0;
+    }
+    .mobile-card {
+      border: 1px solid var(--hairline);
+      background: rgba(255,255,255,0.80);
+      border-radius: 8px;
+      padding: 12px;
+      min-width: 0;
+    }
+    .mobile-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.74rem;
+      margin-bottom: 5px;
+    }
+    .mobile-card strong {
+      display: block;
+      color: var(--ink);
+      font-size: 1.1rem;
+      font-weight: 620;
+      line-height: 1.12;
+      overflow-wrap: anywhere;
+    }
+    .mobile-card em {
+      display: block;
+      color: var(--muted);
+      font-style: normal;
+      font-size: 0.76rem;
+      margin-top: 6px;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
     div[data-testid="stDataFrame"] {
       border: 1px solid var(--hairline);
       border-radius: 8px;
@@ -441,6 +517,33 @@ st.markdown(
       .read-grid, .model-grid, .change-list, .signal-grid, .command-band, .mandate-grid { grid-template-columns: 1fr; }
       .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .section { display: block; }
+    }
+    @media (max-width: 640px) {
+      .block-container { padding: 0.45rem 0.72rem 4.5rem; }
+      .hero { padding: 12px 0 10px; margin-bottom: 10px; }
+      .hero-title { font-size: 2rem; line-height: 1; }
+      .hero-sub { font-size: 0.88rem; line-height: 1.42; margin-top: 9px; }
+      .hero-meta { gap: 6px; margin-top: 10px; }
+      .pill { font-size: 0.74rem; padding: 6px 9px; }
+      .command-main, .quiet-panel, .refresh-panel { padding: 12px; }
+      .command-value { font-size: 2.25rem; }
+      .command-subline { font-size: 0.88rem; }
+      .mandate-tile, .change-card, .signal-card, .mini-metric { padding: 11px; min-height: 0; }
+      .section { margin: 16px 0 8px; }
+      .section h2 { font-size: 1.08rem; }
+      .section p { font-size: 0.84rem; line-height: 1.35; }
+      div[role="radiogroup"] {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      div[role="radiogroup"] label {
+        border-radius: 8px;
+        padding: 9px 8px;
+      }
+      .mobile-card-grid, .metric-grid { grid-template-columns: 1fr; }
+      div[data-testid="stMetric"] { padding: 10px 11px; }
+      div[data-testid="stMetricValue"] { font-size: 1.42rem; }
+      div[data-testid="stDataFrame"] { font-size: 0.78rem; }
     }
     </style>
     """,
@@ -566,6 +669,34 @@ def signed_money(value: object) -> str:
         return money(value)
     prefix = "+" if number > 0 else ""
     return f"{prefix}{money(number)}"
+
+
+def compact_amount(value: object, currency: str = "A$") -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "-"
+    if pd.isna(number):
+        return "-"
+    if abs(number) >= 1_000_000:
+        return f"{currency}{number / 1_000_000:,.2f}m"
+    if abs(number) >= 1_000:
+        return f"{currency}{number / 1_000:,.1f}k"
+    return f"{currency}{number:,.0f}"
+
+
+def card_grid(cards: list[dict[str, str]]) -> None:
+    html = "<div class='mobile-card-grid'>"
+    for card in cards:
+        html += (
+            "<div class='mobile-card'>"
+            f"<span>{card.get('label', '')}</span>"
+            f"<strong>{card.get('value', '')}</strong>"
+            f"<em>{card.get('note', '')}</em>"
+            "</div>"
+        )
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def growth_styles(frame: pd.DataFrame) -> pd.DataFrame:
@@ -896,55 +1027,86 @@ def render_market_tape() -> None:
         sleeve = investments.get("Asset / sleeve", pd.Series("", index=investments.index)).astype(str).str.lower()
         btc_row = investments[category.eq("crypto") | sleeve.str.contains("btc", na=False)]
 
-    with st.expander("Bitcoin AUD/USD refresh", expanded=False):
-        b1, b2 = st.columns([0.7, 1.3])
-        if b1.button("Refresh Bitcoin", width="stretch"):
-            with st.spinner("Refreshing BTC-AUD and BTC-USD..."):
-                cache = refresh_bitcoin_prices()
-                crypto_cache = cache.get("crypto", {})
-            crypto_refresh = cache.get("crypto_refresh", {})
-            st.success(
-                f"Bitcoin refreshed: {crypto_refresh.get('public_refreshed', 0)} of "
-                f"{crypto_refresh.get('requested', 2)} public feeds updated."
-            )
-        b2.caption(f"Bitcoin refresh run: {cache.get('crypto_refresh', {}).get('updated_at') or 'Not refreshed yet'}")
-
-        btc_units = pd.NA
-        workbook_value = pd.NA
-        if not btc_row.empty:
-            btc_units = pd.to_numeric(btc_row.iloc[0].get("Units"), errors="coerce")
-            workbook_value = pd.to_numeric(btc_row.iloc[0].get("Value AUD"), errors="coerce")
-        btc_aud = crypto_cache.get("BTC_AUD", {})
-        btc_usd = crypto_cache.get("BTC_USD", {})
-        btc_aud_price = pd.to_numeric(pd.Series([btc_aud.get("price")]), errors="coerce").iloc[0]
-        btc_usd_price = pd.to_numeric(pd.Series([btc_usd.get("price")]), errors="coerce").iloc[0]
-        btc_units_number = pd.to_numeric(pd.Series([btc_units]), errors="coerce").iloc[0]
-        bitcoin_display = pd.DataFrame(
-            [
-                {
-                    "Feed": "BTC-AUD",
-                    "Price": btc_aud_price,
-                    "Currency": btc_aud.get("currency", "AUD"),
-                    "BTC units": btc_units_number,
-                    "Live value AUD": btc_aud_price * btc_units_number if pd.notna(btc_aud_price) and pd.notna(btc_units_number) else pd.NA,
-                    "Live value USD": pd.NA,
-                    "Workbook value AUD": workbook_value,
-                    "Source": btc_aud.get("source", ""),
-                    "Fetched at": btc_aud.get("fetched_at", ""),
-                },
-                {
-                    "Feed": "BTC-USD",
-                    "Price": btc_usd_price,
-                    "Currency": btc_usd.get("currency", "USD"),
-                    "BTC units": btc_units_number,
-                    "Live value AUD": pd.NA,
-                    "Live value USD": btc_usd_price * btc_units_number if pd.notna(btc_usd_price) and pd.notna(btc_units_number) else pd.NA,
-                    "Workbook value AUD": workbook_value,
-                    "Source": btc_usd.get("source", ""),
-                    "Fetched at": btc_usd.get("fetched_at", ""),
-                },
-            ]
+    st.markdown(
+        "<div class='refresh-panel'><div class='refresh-title'>Bitcoin live feed</div>"
+        "<div class='refresh-note'>Refreshes BTC-AUD and BTC-USD separately from the listed-share market tape.</div></div>",
+        unsafe_allow_html=True,
+    )
+    b1, b2 = st.columns([0.72, 1.28])
+    if b1.button("Refresh Bitcoin", width="stretch"):
+        with st.spinner("Refreshing BTC-AUD and BTC-USD..."):
+            cache = refresh_bitcoin_prices()
+            crypto_cache = cache.get("crypto", {})
+        crypto_refresh = cache.get("crypto_refresh", {})
+        st.success(
+            f"Bitcoin refreshed: {crypto_refresh.get('public_refreshed', 0)} of "
+            f"{crypto_refresh.get('requested', 2)} public feeds updated."
         )
+    b2.caption(f"Bitcoin refresh run: {cache.get('crypto_refresh', {}).get('updated_at') or 'Not refreshed yet'}")
+
+    btc_units = pd.NA
+    workbook_value = pd.NA
+    if not btc_row.empty:
+        btc_units = pd.to_numeric(btc_row.iloc[0].get("Units"), errors="coerce")
+        workbook_value = pd.to_numeric(btc_row.iloc[0].get("Value AUD"), errors="coerce")
+    btc_aud = crypto_cache.get("BTC_AUD", {})
+    btc_usd = crypto_cache.get("BTC_USD", {})
+    btc_aud_price = pd.to_numeric(pd.Series([btc_aud.get("price")]), errors="coerce").iloc[0]
+    btc_usd_price = pd.to_numeric(pd.Series([btc_usd.get("price")]), errors="coerce").iloc[0]
+    btc_units_number = pd.to_numeric(pd.Series([btc_units]), errors="coerce").iloc[0]
+    live_value_aud = btc_aud_price * btc_units_number if pd.notna(btc_aud_price) and pd.notna(btc_units_number) else pd.NA
+    live_value_usd = btc_usd_price * btc_units_number if pd.notna(btc_usd_price) and pd.notna(btc_units_number) else pd.NA
+    card_grid(
+        [
+            {
+                "label": "BTC-AUD",
+                "value": compact_amount(btc_aud_price),
+                "note": f"{compact_amount(live_value_aud)} live value | {btc_aud.get('source', 'Yahoo Finance') or 'Yahoo Finance'}",
+            },
+            {
+                "label": "BTC-USD",
+                "value": compact_amount(btc_usd_price, 'US$'),
+                "note": f"{compact_amount(live_value_usd, 'US$')} live value | {btc_usd.get('source', 'Yahoo Finance') or 'Yahoo Finance'}",
+            },
+            {
+                "label": "BTC units",
+                "value": f"{btc_units_number:,.6f}" if pd.notna(btc_units_number) else "-",
+                "note": "From investment register",
+            },
+            {
+                "label": "Workbook BTC mark",
+                "value": compact_amount(workbook_value),
+                "note": "Fallback management value",
+            },
+        ]
+    )
+    bitcoin_display = pd.DataFrame(
+        [
+            {
+                "Feed": "BTC-AUD",
+                "Price": btc_aud_price,
+                "Currency": btc_aud.get("currency", "AUD"),
+                "BTC units": btc_units_number,
+                "Live value AUD": live_value_aud,
+                "Live value USD": pd.NA,
+                "Workbook value AUD": workbook_value,
+                "Source": btc_aud.get("source", ""),
+                "Fetched at": btc_aud.get("fetched_at", ""),
+            },
+            {
+                "Feed": "BTC-USD",
+                "Price": btc_usd_price,
+                "Currency": btc_usd.get("currency", "USD"),
+                "BTC units": btc_units_number,
+                "Live value AUD": pd.NA,
+                "Live value USD": live_value_usd,
+                "Workbook value AUD": workbook_value,
+                "Source": btc_usd.get("source", ""),
+                "Fetched at": btc_usd.get("fetched_at", ""),
+            },
+        ]
+    )
+    with st.expander("Bitcoin feed audit", expanded=False):
         show_table(bitcoin_display, height=180)
 
     if not price_sources.empty:
@@ -1011,15 +1173,31 @@ def render_property_and_debt() -> None:
         c4.metric("Net property debt", money(props["Net debt after offset"].sum()))
         show_table(props, height=260, percent_cols=["Gross LVR", "Net LVR", "Gross yield"])
 
-    with st.expander("Property estimate refresh", expanded=False):
-        st.caption("Property portal refresh attempts configured public source pages. If a source blocks server-side requests or returns no structured estimate, cockpit values are retained.")
-        p1, p2 = st.columns([0.7, 1.3])
-        if p1.button("Refresh property estimates", width="stretch"):
-            with st.spinner("Refreshing configured public property sources..."):
-                refresh_property_estimates()
-            st.success("Property refresh completed. Review status by property before applying any valuation changes.")
-        p2.caption("Separate from the market tape. This does not rewrite monthly tracking or the workbook.")
-        show_table(property_refresh_view(), height=260)
+    st.markdown(
+        "<div class='refresh-panel'><div class='refresh-title'>Property estimate refresh</div>"
+        "<div class='refresh-note'>Separate from the market tape. Portal attempts never rewrite monthly tracking or workbook values automatically.</div></div>",
+        unsafe_allow_html=True,
+    )
+    p1, p2 = st.columns([0.72, 1.28])
+    if p1.button("Refresh property estimates", width="stretch"):
+        with st.spinner("Refreshing configured public property sources..."):
+            refresh_property_estimates()
+        st.success("Property refresh completed. Review the status before applying any valuation changes.")
+    p2.caption("If a property source blocks server-side requests or returns no structured estimate, cockpit values are retained.")
+    property_refresh = property_refresh_view()
+    if not property_refresh.empty:
+        card_grid(
+            [
+                {
+                    "label": str(row.get("Property", "")),
+                    "value": compact_amount(row.get("Refreshed value")) if pd.notna(row.get("Refreshed value")) else compact_amount(row.get("Cockpit value")),
+                    "note": str(row.get("Action", "Retained cockpit value")),
+                }
+                for _, row in property_refresh.head(4).iterrows()
+            ]
+        )
+        with st.expander("Property refresh audit", expanded=False):
+            show_table(property_refresh, height=260)
 
     tabs = st.tabs(["Register", "Loans", "P&L", "Keith", "Keith coverage", "Controls"])
     with tabs[0]:
@@ -1176,18 +1354,22 @@ def main() -> None:
             return
         render_header()
 
-        tabs = st.tabs(["Overview", "Model", "Market", "Property", "Governance", "Update"])
-        with tabs[0]:
+        view = st.selectbox(
+            "View",
+            ["Overview", "Market", "Property", "Model", "Governance", "Update"],
+            key="main_view",
+        )
+        if view == "Overview":
             render_overview()
-        with tabs[1]:
-            render_model_library()
-        with tabs[2]:
+        elif view == "Market":
             render_market_tape()
-        with tabs[3]:
+        elif view == "Property":
             render_property_and_debt()
-        with tabs[4]:
+        elif view == "Model":
+            render_model_library()
+        elif view == "Governance":
             render_governance()
-        with tabs[5]:
+        elif view == "Update":
             render_update_flow()
 
 
