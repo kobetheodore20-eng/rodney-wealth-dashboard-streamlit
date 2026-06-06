@@ -84,33 +84,35 @@ def refresh_bitcoin_prices() -> dict[str, object]:
 st.markdown(
     """
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap');
     :root {
-      --ink: #07182f;
-      --soft-ink: #25364f;
-      --muted: #647083;
-      --hairline: rgba(0, 107, 182, 0.18);
-      --paper: #f7f9fc;
-      --panel: rgba(255, 255, 255, 0.84);
-      --panel-solid: #ffffff;
-      --mist: #e8edf5;
-      --blue: #006bb6;
-      --navy: #002d62;
-      --orange: #f58426;
-      --silver: #bec0c2;
+      --ink: #f6f0e8;
+      --soft-ink: #d9d4cc;
+      --muted: #9ea7a6;
+      --hairline: rgba(246, 240, 232, 0.12);
+      --paper: #080b0f;
+      --panel: rgba(18, 23, 29, 0.82);
+      --panel-solid: #12171d;
+      --mist: #182027;
+      --blue: #65e7f1;
+      --navy: #f6f0e8;
+      --orange: #d7ff64;
+      --silver: #c8bda8;
       --green: #2f6554;
-      --gain: #24745c;
-      --loss: #a34038;
-      --amber: #a75b17;
-      --line: #d9e2ee;
+      --gain: #35d07f;
+      --loss: #ff6b6b;
+      --amber: #f2c879;
+      --line: rgba(246, 240, 232, 0.16);
     }
     .stApp {
       background:
-        linear-gradient(180deg, #ffffff 0%, #f5f8fc 42%, #edf3fa 100%);
+        linear-gradient(180deg, #080b0f 0%, #0d1117 48%, #111717 100%);
       color: var(--ink);
+      font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     header[data-testid="stHeader"] { background: transparent; }
     .block-container { max-width: 1360px; padding-top: 1.2rem; }
-    h1, h2, h3, p { letter-spacing: 0; }
+    h1, h2, h3, p, label, span, div { letter-spacing: 0; }
     .hero {
       padding: 26px 0 18px;
       border-bottom: 3px solid var(--blue);
@@ -129,8 +131,9 @@ st.markdown(
     .hero-title {
       color: var(--navy);
       font-size: clamp(2.25rem, 5.4vw, 4.7rem);
-      line-height: 0.96;
-      font-weight: 650;
+      line-height: 0.91;
+      font-family: "Instrument Serif", Georgia, serif;
+      font-weight: 400;
       letter-spacing: 0;
       margin: 0;
     }
@@ -148,8 +151,8 @@ st.markdown(
       margin-top: 16px;
     }
     .pill {
-      border: 1px solid rgba(0, 107, 182, 0.22);
-      background: rgba(255,255,255,0.86);
+      border: 1px solid rgba(246,240,232,0.12);
+      background: rgba(255,255,255,0.055);
       color: var(--soft-ink);
       border-radius: 999px;
       padding: 8px 12px;
@@ -164,12 +167,12 @@ st.markdown(
       margin: 4px 0 16px;
     }
     .command-main {
-      background: linear-gradient(135deg, rgba(255,255,255,0.94), rgba(236,244,253,0.90));
-      border: 1px solid rgba(0,107,182,0.20);
+      background: linear-gradient(135deg, rgba(18,23,29,0.92), rgba(12,16,21,0.92));
+      border: 1px solid rgba(101,231,241,0.18);
       border-top: 4px solid var(--blue);
       border-radius: 8px;
       padding: 18px;
-      box-shadow: 0 22px 70px rgba(20,20,20,0.05);
+      box-shadow: 0 28px 80px rgba(0,0,0,0.30);
       backdrop-filter: blur(22px);
     }
     .command-kicker {
@@ -180,7 +183,7 @@ st.markdown(
     .command-value {
       font-size: clamp(2.4rem, 5vw, 4.4rem);
       line-height: 0.98;
-      font-weight: 640;
+      font-weight: 760;
       letter-spacing: 0;
       color: var(--navy);
     }
@@ -198,8 +201,8 @@ st.markdown(
       height: 100%;
     }
     .mandate-tile {
-      border: 1px solid rgba(0,107,182,0.17);
-      background: rgba(255,255,255,0.86);
+      border: 1px solid rgba(246,240,232,0.10);
+      background: rgba(255,255,255,0.055);
       border-radius: 8px;
       padding: 14px;
       min-height: 108px;
@@ -233,11 +236,11 @@ st.markdown(
     }
     div[data-testid="stMetric"] {
       background: var(--panel);
-      border: 1px solid rgba(0,107,182,0.18);
-      border-top: 3px solid rgba(245,132,38,0.72);
+      border: 1px solid rgba(246,240,232,0.11);
+      border-top: 3px solid rgba(215,255,100,0.68);
       border-radius: 8px;
       padding: 12px 14px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.045);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.22);
       backdrop-filter: blur(20px);
     }
     div[data-testid="stMetricLabel"] {
@@ -273,10 +276,10 @@ st.markdown(
     }
     .quiet-panel {
       background: var(--panel);
-      border: 1px solid rgba(0,107,182,0.18);
+      border: 1px solid rgba(246,240,232,0.10);
       border-radius: 8px;
       padding: 16px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.04);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.22);
       backdrop-filter: blur(20px);
     }
     .read-grid {
@@ -285,8 +288,8 @@ st.markdown(
       gap: 10px;
     }
     .read-card {
-      border: 1px solid rgba(0,107,182,0.16);
-      background: rgba(255,255,255,0.88);
+      border: 1px solid rgba(246,240,232,0.10);
+      background: rgba(255,255,255,0.055);
       border-radius: 8px;
       padding: 14px;
     }
@@ -312,8 +315,8 @@ st.markdown(
       margin-bottom: 8px;
     }
     .model-card {
-      border: 1px solid rgba(0,107,182,0.16);
-      background: rgba(255,255,255,0.88);
+      border: 1px solid rgba(246,240,232,0.10);
+      background: rgba(255,255,255,0.055);
       border-radius: 8px;
       padding: 12px;
     }
@@ -334,8 +337,8 @@ st.markdown(
       margin: 8px 0 12px;
     }
     .change-card {
-      background: rgba(255,255,255,0.88);
-      border: 1px solid rgba(0,107,182,0.16);
+      background: rgba(255,255,255,0.055);
+      border: 1px solid rgba(246,240,232,0.10);
       border-radius: 8px;
       padding: 12px 13px;
     }
@@ -364,8 +367,8 @@ st.markdown(
       margin: 8px 0 12px;
     }
     .signal-card {
-      border: 1px solid rgba(0,107,182,0.16);
-      background: rgba(255,255,255,0.88);
+      border: 1px solid rgba(246,240,232,0.10);
+      background: rgba(255,255,255,0.055);
       border-radius: 8px;
       padding: 14px;
       min-height: 142px;
@@ -398,11 +401,11 @@ st.markdown(
     }
     .mini-metric {
       background: var(--panel);
-      border: 1px solid rgba(0,107,182,0.16);
+      border: 1px solid rgba(246,240,232,0.10);
       border-left: 3px solid var(--orange);
       border-radius: 8px;
       padding: 12px 13px;
-      box-shadow: 0 18px 50px rgba(0,0,0,0.04);
+      box-shadow: 0 18px 50px rgba(0,0,0,0.20);
     }
     .mini-label {
       color: var(--muted);
@@ -446,29 +449,29 @@ st.markdown(
       align-items: stretch;
     }
     div[role="radiogroup"] label {
-      border: 1px solid rgba(0,107,182,0.18);
-      background: rgba(255,255,255,0.82);
+      border: 1px solid rgba(246,240,232,0.10);
+      background: rgba(255,255,255,0.055);
       border-radius: 999px;
       padding: 7px 12px;
       min-height: 38px;
       justify-content: center;
     }
     div[role="radiogroup"] label:has(input:checked) {
-      background: var(--navy);
-      color: white;
+      background: var(--ink);
+      color: #080b0f;
       border-color: var(--blue);
     }
     div[role="radiogroup"] label:has(input:checked) * {
       color: white !important;
     }
     .refresh-panel {
-      border: 1px solid rgba(0,107,182,0.18);
+      border: 1px solid rgba(246,240,232,0.10);
       border-left: 4px solid var(--orange);
-      background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(239,246,253,0.92));
+      background: linear-gradient(135deg, rgba(20,26,33,0.92), rgba(12,16,21,0.92));
       border-radius: 8px;
       padding: 14px;
       margin: 10px 0 14px;
-      box-shadow: 0 18px 45px rgba(0,0,0,0.035);
+      box-shadow: 0 18px 45px rgba(0,0,0,0.22);
     }
     .refresh-title {
       color: var(--navy);
@@ -489,8 +492,8 @@ st.markdown(
       margin: 10px 0;
     }
     .mobile-card {
-      border: 1px solid rgba(0,107,182,0.18);
-      background: rgba(255,255,255,0.92);
+      border: 1px solid rgba(246,240,232,0.10);
+      background: rgba(255,255,255,0.055);
       border-radius: 8px;
       padding: 12px;
       min-width: 0;
@@ -519,26 +522,53 @@ st.markdown(
       overflow-wrap: anywhere;
     }
     div[data-testid="stDataFrame"] {
-      border: 1px solid rgba(0,107,182,0.18);
+      border: 1px solid rgba(246,240,232,0.10);
       border-radius: 8px;
       overflow: hidden;
-      background: white;
+      background: var(--panel-solid);
+    }
+    div[data-testid="stDataFrame"] * {
+      font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
     }
     div[data-baseweb="select"] > div {
-      border: 1px solid rgba(0,107,182,0.24) !important;
-      background: rgba(255,255,255,0.94) !important;
+      border: 1px solid rgba(246,240,232,0.16) !important;
+      background: rgba(255,255,255,0.065) !important;
       border-radius: 8px !important;
+      color: var(--ink) !important;
+    }
+    div[data-baseweb="select"] span,
+    div[data-baseweb="select"] div,
+    div[data-baseweb="select"] input {
+      color: var(--ink) !important;
+      font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+    }
+    div[data-testid="stSelectbox"] label,
+    div[data-testid="stSelectbox"] label *,
+    div[data-testid="stWidgetLabel"],
+    div[data-testid="stWidgetLabel"] * {
+      color: var(--soft-ink) !important;
     }
     div[data-baseweb="select"] svg {
       color: var(--orange);
     }
+    div[data-baseweb="popover"],
+    ul[role="listbox"] {
+      background: #11171d !important;
+      color: var(--ink) !important;
+      border: 1px solid rgba(246,240,232,0.12) !important;
+    }
+    input, textarea {
+      color: var(--ink) !important;
+      background: rgba(255,255,255,0.065) !important;
+      border-color: rgba(246,240,232,0.14) !important;
+    }
     button[kind="primary"], .stButton button {
       border-radius: 999px !important;
-      border: 1px solid rgba(0,45,98,0.18) !important;
+      border: 1px solid rgba(215,255,100,0.32) !important;
       background: var(--orange) !important;
-      color: #111827 !important;
+      color: #080b0f !important;
       font-weight: 650 !important;
-      box-shadow: 0 10px 24px rgba(245,132,38,0.18) !important;
+      box-shadow: 0 10px 28px rgba(215,255,100,0.18) !important;
     }
     @media (max-width: 900px) {
       .read-grid, .model-grid, .change-list, .signal-grid, .command-band, .mandate-grid { grid-template-columns: 1fr; }
