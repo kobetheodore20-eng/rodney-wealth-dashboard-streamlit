@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.config import DATA_DIR, SOURCE_WORKBOOK  # noqa: E402
+from app.monthly_update import normalize_monthly_property_base  # noqa: E402
 
 
 SHEETS = {
@@ -161,6 +162,12 @@ def main() -> None:
         frame = read_sheet_table(sheet_name, header_marker)
         frame.to_csv(DATA_DIR / f"{output_name}.csv", index=False)
         print(f"Imported {sheet_name} -> data/{output_name}.csv ({len(frame)} rows)")
+
+    monthly = pd.read_csv(DATA_DIR / "monthly_tracking.csv")
+    property_register = pd.read_csv(DATA_DIR / "property_register.csv")
+    normalized_monthly = normalize_monthly_property_base(monthly, property_register)
+    normalized_monthly.to_csv(DATA_DIR / "monthly_tracking.csv", index=False)
+    print("Normalized monthly tracking to the current property value base")
 
 
 if __name__ == "__main__":

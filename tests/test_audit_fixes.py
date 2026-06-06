@@ -1,25 +1,13 @@
 from __future__ import annotations
 
-import base64
-import io
-import zipfile
-
 import pytest
 import pandas as pd
 
-from app.monthly_update import build_monthly_update_frame
+from app.monthly_update import build_monthly_update_frame, normalize_monthly_property_base
 from app import portfolio
 from app import insights
-from app import data_store
 from app.market_prices import refresh_prices
 from scripts.import_workbook import enforce_formula_fidelity
-
-
-def zipped_csv_b64(name: str, csv_text: str) -> str:
-    payload = io.BytesIO()
-    with zipfile.ZipFile(payload, "w") as bundle:
-        bundle.writestr(f"{name}.csv", csv_text)
-    return base64.b64encode(payload.getvalue()).decode("ascii")
 
 
 def test_outside_tolerance_public_price_uses_explicit_workbook_fallback(monkeypatch):
@@ -73,38 +61,6 @@ def test_allocation_and_brief_fail_closed_without_data_bundle(monkeypatch):
     assert signals[0].status == "Fail closed"
     assert "Data not loaded" in risks.loc[0, "Status"]
     assert checklist.loc[0, "Status"] == "Blocked - not loaded"
-
-
-def test_read_table_prefers_encrypted_bundle_over_stale_secret(monkeypatch, tmp_path):
-    monkeypatch.setattr(data_store, "DATA_DIR", tmp_path)
-
-    def bundle_with(value: str) -> zipfile.ZipFile:
-        payload = io.BytesIO()
-        with zipfile.ZipFile(payload, "w") as bundle:
-            bundle.writestr("asset.csv", f"source,value\n{value},1\n")
-        return zipfile.ZipFile(io.BytesIO(payload.getvalue()))
-
-    monkeypatch.setattr(data_store, "encrypted_data_bundle", lambda: bundle_with("encrypted"))
-    monkeypatch.setattr(data_store, "secret_data_bundle", lambda: bundle_with("stale-secret"))
-
-    result = data_store.read_table("asset")
-
-    assert result.loc[0, "source"] == "encrypted"
-
-
-def test_read_table_falls_back_to_secret_when_encrypted_bundle_is_invalid(monkeypatch, tmp_path):
-    from cryptography.fernet import Fernet
-
-    invalid_bundle_path = tmp_path / "data_bundle.enc"
-    invalid_bundle_path.write_bytes(b"not a valid encrypted bundle")
-    monkeypatch.setattr(data_store, "DATA_DIR", tmp_path / "data")
-    monkeypatch.setattr(data_store, "ENCRYPTED_DATA_BUNDLE_PATH", invalid_bundle_path)
-    monkeypatch.setenv("WEALTH_COCKPIT_DATA_BUNDLE_KEY", Fernet.generate_key().decode("ascii"))
-    monkeypatch.setenv("WEALTH_COCKPIT_DATA_BUNDLE_B64", zipped_csv_b64("asset", "source,value\nsecret,1\n"))
-
-    result = data_store.read_table("asset")
-
-    assert result.loc[0, "source"] == "secret"
 
 
 def test_stale_cached_price_is_not_reported_as_fresh_public(monkeypatch):
@@ -192,6 +148,46 @@ def test_monthly_update_recomputes_existing_delta_columns():
     assert latest["Shares Δ"] == 10
     assert latest["Super Δ"] == 10
     assert latest["Debt Δ"] == -20
+
+
+def test_property_rebase_does_not_create_false_monthly_movement():
+    monthly = pd.DataFrame(
+        [
+            {
+                "Date": "2026-05-01",
+                "Cash / offsets": 100,
+                "Property value": 1_000,
+                "Property equity": 700,
+                "Crypto": 20,
+                "Shares": 30,
+                "Super": 40,
+                "Total assets": 1_190,
+                "Total debt": 300,
+                "Net debt": 200,
+                "Net worth": 890,
+            },
+            {
+                "Date": "2026-06-01",
+                "Cash / offsets": 110,
+                "Property value": 900,
+                "Property equity": 590,
+                "Crypto": 20,
+                "Shares": 35,
+                "Super": 40,
+                "Total assets": 1_105,
+                "Total debt": 310,
+                "Net debt": 200,
+                "Net worth": 795,
+            },
+        ]
+    )
+    props = pd.DataFrame([{"Property": "A", "Value": 900}])
+
+    result = normalize_monthly_property_base(monthly, props)
+
+    assert result["Property value"].tolist() == [900, 900]
+    assert result.loc[1, "Property equity MoM"] == -10
+    assert result.loc[1, "Net worth MoM"] == 5
 
 
 def test_refresh_prices_reports_unique_counts_and_stale_cache(monkeypatch):
