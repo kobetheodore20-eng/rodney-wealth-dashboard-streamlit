@@ -85,24 +85,27 @@ st.markdown(
     """
     <style>
     :root {
-      --ink: #121212;
-      --soft-ink: #343638;
-      --muted: #777b80;
-      --hairline: rgba(18, 18, 18, 0.11);
-      --paper: #f6f6f3;
-      --panel: rgba(255, 255, 255, 0.78);
+      --ink: #07182f;
+      --soft-ink: #25364f;
+      --muted: #647083;
+      --hairline: rgba(0, 107, 182, 0.18);
+      --paper: #f7f9fc;
+      --panel: rgba(255, 255, 255, 0.84);
       --panel-solid: #ffffff;
-      --mist: #e9e9e4;
-      --blue: #435d67;
+      --mist: #e8edf5;
+      --blue: #006bb6;
+      --navy: #002d62;
+      --orange: #f58426;
+      --silver: #bec0c2;
       --green: #2f6554;
       --gain: #24745c;
       --loss: #a34038;
-      --amber: #8b744b;
-      --line: #d8d8d1;
+      --amber: #a75b17;
+      --line: #d9e2ee;
     }
     .stApp {
       background:
-        linear-gradient(180deg, rgba(255,255,255,0.96), rgba(246,246,243,0.98) 46%, #eeeeea 100%);
+        linear-gradient(180deg, #ffffff 0%, #f5f8fc 42%, #edf3fa 100%);
       color: var(--ink);
     }
     header[data-testid="stHeader"] { background: transparent; }
@@ -110,11 +113,21 @@ st.markdown(
     h1, h2, h3, p { letter-spacing: 0; }
     .hero {
       padding: 26px 0 18px;
-      border-bottom: 1px solid var(--hairline);
+      border-bottom: 3px solid var(--blue);
       margin-bottom: 20px;
+      position: relative;
+    }
+    .hero:after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: -3px;
+      width: 132px;
+      height: 3px;
+      background: var(--orange);
     }
     .hero-title {
-      color: var(--ink);
+      color: var(--navy);
       font-size: clamp(2.25rem, 5.4vw, 4.7rem);
       line-height: 0.96;
       font-weight: 650;
@@ -135,8 +148,8 @@ st.markdown(
       margin-top: 16px;
     }
     .pill {
-      border: 1px solid var(--hairline);
-      background: rgba(255,255,255,0.64);
+      border: 1px solid rgba(0, 107, 182, 0.22);
+      background: rgba(255,255,255,0.86);
       color: var(--soft-ink);
       border-radius: 999px;
       padding: 8px 12px;
@@ -151,15 +164,16 @@ st.markdown(
       margin: 4px 0 16px;
     }
     .command-main {
-      background: rgba(255,255,255,0.76);
-      border: 1px solid var(--hairline);
+      background: linear-gradient(135deg, rgba(255,255,255,0.94), rgba(236,244,253,0.90));
+      border: 1px solid rgba(0,107,182,0.20);
+      border-top: 4px solid var(--blue);
       border-radius: 8px;
       padding: 18px;
       box-shadow: 0 22px 70px rgba(20,20,20,0.05);
       backdrop-filter: blur(22px);
     }
     .command-kicker {
-      color: var(--muted);
+      color: var(--blue);
       font-size: 0.78rem;
       margin-bottom: 8px;
     }
@@ -168,7 +182,7 @@ st.markdown(
       line-height: 0.98;
       font-weight: 640;
       letter-spacing: 0;
-      color: var(--ink);
+      color: var(--navy);
     }
     .command-subline {
       color: var(--soft-ink);
@@ -184,8 +198,8 @@ st.markdown(
       height: 100%;
     }
     .mandate-tile {
-      border: 1px solid var(--hairline);
-      background: rgba(255,255,255,0.62);
+      border: 1px solid rgba(0,107,182,0.17);
+      background: rgba(255,255,255,0.86);
       border-radius: 8px;
       padding: 14px;
       min-height: 108px;
@@ -197,7 +211,7 @@ st.markdown(
       margin-bottom: 8px;
     }
     .mandate-tile strong {
-      color: var(--ink);
+      color: var(--navy);
       font-size: 1.28rem;
       font-weight: 620;
       letter-spacing: 0;
@@ -219,7 +233,8 @@ st.markdown(
     }
     div[data-testid="stMetric"] {
       background: var(--panel);
-      border: 1px solid var(--hairline);
+      border: 1px solid rgba(0,107,182,0.18);
+      border-top: 3px solid rgba(245,132,38,0.72);
       border-radius: 8px;
       padding: 12px 14px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.045);
@@ -231,7 +246,7 @@ st.markdown(
       font-weight: 520;
     }
     div[data-testid="stMetricValue"] {
-      color: var(--ink);
+      color: var(--navy);
       font-weight: 620;
       letter-spacing: -0.015em;
       font-size: 1.72rem;
@@ -245,7 +260,7 @@ st.markdown(
       margin: 22px 0 10px;
     }
     .section h2 {
-      color: var(--ink);
+      color: var(--navy);
       font-size: 1.35rem;
       font-weight: 610;
       margin: 0;
@@ -258,7 +273,7 @@ st.markdown(
     }
     .quiet-panel {
       background: var(--panel);
-      border: 1px solid var(--hairline);
+      border: 1px solid rgba(0,107,182,0.18);
       border-radius: 8px;
       padding: 16px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.04);
@@ -270,18 +285,18 @@ st.markdown(
       gap: 10px;
     }
     .read-card {
-      border: 1px solid var(--hairline);
-      background: rgba(255,255,255,0.68);
+      border: 1px solid rgba(0,107,182,0.16);
+      background: rgba(255,255,255,0.88);
       border-radius: 8px;
       padding: 14px;
     }
     .read-title {
-      color: var(--ink);
+      color: var(--navy);
       font-weight: 620;
       margin-bottom: 5px;
     }
     .read-status {
-      color: var(--blue);
+      color: var(--orange);
       font-size: 0.84rem;
       margin-bottom: 8px;
     }
@@ -297,8 +312,8 @@ st.markdown(
       margin-bottom: 8px;
     }
     .model-card {
-      border: 1px solid var(--hairline);
-      background: rgba(255,255,255,0.72);
+      border: 1px solid rgba(0,107,182,0.16);
+      background: rgba(255,255,255,0.88);
       border-radius: 8px;
       padding: 12px;
     }
@@ -309,7 +324,7 @@ st.markdown(
     .model-card strong {
       display: block;
       margin-top: 4px;
-      color: var(--ink);
+      color: var(--navy);
       font-size: 1rem;
     }
     .change-list {
@@ -319,8 +334,8 @@ st.markdown(
       margin: 8px 0 12px;
     }
     .change-card {
-      background: rgba(255,255,255,0.74);
-      border: 1px solid var(--hairline);
+      background: rgba(255,255,255,0.88);
+      border: 1px solid rgba(0,107,182,0.16);
       border-radius: 8px;
       padding: 12px 13px;
     }
@@ -330,7 +345,7 @@ st.markdown(
       margin-bottom: 6px;
     }
     .change-value {
-      color: var(--ink);
+      color: var(--navy);
       font-weight: 620;
       font-size: 1.1rem;
     }
@@ -349,19 +364,19 @@ st.markdown(
       margin: 8px 0 12px;
     }
     .signal-card {
-      border: 1px solid var(--hairline);
-      background: rgba(255,255,255,0.70);
+      border: 1px solid rgba(0,107,182,0.16);
+      background: rgba(255,255,255,0.88);
       border-radius: 8px;
       padding: 14px;
       min-height: 142px;
     }
     .signal-priority {
-      color: var(--amber);
+      color: var(--orange);
       font-size: 0.75rem;
       margin-bottom: 8px;
     }
     .signal-title {
-      color: var(--ink);
+      color: var(--navy);
       font-weight: 620;
       margin-bottom: 5px;
     }
@@ -383,7 +398,8 @@ st.markdown(
     }
     .mini-metric {
       background: var(--panel);
-      border: 1px solid var(--hairline);
+      border: 1px solid rgba(0,107,182,0.16);
+      border-left: 3px solid var(--orange);
       border-radius: 8px;
       padding: 12px 13px;
       box-shadow: 0 18px 50px rgba(0,0,0,0.04);
@@ -394,7 +410,7 @@ st.markdown(
       margin-bottom: 6px;
     }
     .mini-value {
-      color: var(--ink);
+      color: var(--navy);
       font-size: 1.45rem;
       font-weight: 620;
       letter-spacing: -0.012em;
@@ -416,11 +432,11 @@ st.markdown(
       border-radius: 0;
     }
     .stTabs [aria-selected="true"] {
-      color: var(--ink);
-      border-bottom: 1px solid var(--ink) !important;
+      color: var(--navy);
+      border-bottom: 2px solid var(--orange) !important;
     }
     .stTabs [data-baseweb="tab-highlight"] {
-      background-color: var(--ink) !important;
+      background-color: var(--orange) !important;
     }
     .stTabs [data-baseweb="tab-border"] {
       background-color: var(--hairline) !important;
@@ -430,31 +446,32 @@ st.markdown(
       align-items: stretch;
     }
     div[role="radiogroup"] label {
-      border: 1px solid var(--hairline);
-      background: rgba(255,255,255,0.70);
+      border: 1px solid rgba(0,107,182,0.18);
+      background: rgba(255,255,255,0.82);
       border-radius: 999px;
       padding: 7px 12px;
       min-height: 38px;
       justify-content: center;
     }
     div[role="radiogroup"] label:has(input:checked) {
-      background: #151515;
+      background: var(--navy);
       color: white;
-      border-color: #151515;
+      border-color: var(--blue);
     }
     div[role="radiogroup"] label:has(input:checked) * {
       color: white !important;
     }
     .refresh-panel {
-      border: 1px solid var(--hairline);
-      background: rgba(255,255,255,0.78);
+      border: 1px solid rgba(0,107,182,0.18);
+      border-left: 4px solid var(--orange);
+      background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(239,246,253,0.92));
       border-radius: 8px;
       padding: 14px;
       margin: 10px 0 14px;
       box-shadow: 0 18px 45px rgba(0,0,0,0.035);
     }
     .refresh-title {
-      color: var(--ink);
+      color: var(--navy);
       font-weight: 620;
       font-size: 1rem;
       margin-bottom: 5px;
@@ -472,8 +489,8 @@ st.markdown(
       margin: 10px 0;
     }
     .mobile-card {
-      border: 1px solid var(--hairline);
-      background: rgba(255,255,255,0.80);
+      border: 1px solid rgba(0,107,182,0.18);
+      background: rgba(255,255,255,0.92);
       border-radius: 8px;
       padding: 12px;
       min-width: 0;
@@ -486,7 +503,7 @@ st.markdown(
     }
     .mobile-card strong {
       display: block;
-      color: var(--ink);
+      color: var(--navy);
       font-size: 1.1rem;
       font-weight: 620;
       line-height: 1.12;
@@ -502,16 +519,26 @@ st.markdown(
       overflow-wrap: anywhere;
     }
     div[data-testid="stDataFrame"] {
-      border: 1px solid var(--hairline);
+      border: 1px solid rgba(0,107,182,0.18);
       border-radius: 8px;
       overflow: hidden;
       background: white;
     }
+    div[data-baseweb="select"] > div {
+      border: 1px solid rgba(0,107,182,0.24) !important;
+      background: rgba(255,255,255,0.94) !important;
+      border-radius: 8px !important;
+    }
+    div[data-baseweb="select"] svg {
+      color: var(--orange);
+    }
     button[kind="primary"], .stButton button {
       border-radius: 999px !important;
-      border: 1px solid var(--hairline) !important;
-      background: #151515 !important;
-      color: white !important;
+      border: 1px solid rgba(0,45,98,0.18) !important;
+      background: var(--orange) !important;
+      color: #111827 !important;
+      font-weight: 650 !important;
+      box-shadow: 0 10px 24px rgba(245,132,38,0.18) !important;
     }
     @media (max-width: 900px) {
       .read-grid, .model-grid, .change-list, .signal-grid, .command-band, .mandate-grid { grid-template-columns: 1fr; }
