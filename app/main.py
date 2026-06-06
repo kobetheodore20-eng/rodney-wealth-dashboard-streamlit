@@ -84,38 +84,39 @@ def refresh_bitcoin_prices() -> dict[str, object]:
 st.markdown(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     :root {
-      --ink: #f6f0e8;
-      --soft-ink: #d9d4cc;
-      --muted: #9ea7a6;
-      --hairline: rgba(246, 240, 232, 0.12);
-      --paper: #080b0f;
-      --panel: rgba(18, 23, 29, 0.82);
-      --panel-solid: #12171d;
-      --mist: #182027;
-      --blue: #65e7f1;
-      --navy: #f6f0e8;
-      --orange: #d7ff64;
-      --silver: #c8bda8;
+      --ink: #f7f2ea;
+      --soft-ink: #ddd4c8;
+      --muted: #a99f94;
+      --hairline: rgba(232, 202, 171, 0.16);
+      --paper: #030504;
+      --panel: rgba(8, 37, 31, 0.76);
+      --panel-solid: #071b17;
+      --mist: #0c2b25;
+      --blue: #9fd9cc;
+      --navy: #f7f2ea;
+      --orange: #d0aa84;
+      --silver: #bfb0a1;
       --green: #2f6554;
       --gain: #35d07f;
       --loss: #ff6b6b;
-      --amber: #f2c879;
-      --line: rgba(246, 240, 232, 0.16);
+      --amber: #d0aa84;
+      --line: rgba(232, 202, 171, 0.16);
     }
     .stApp {
       background:
-        linear-gradient(180deg, #080b0f 0%, #0d1117 48%, #111717 100%);
+        linear-gradient(122deg, rgba(188, 173, 148, 0.20) 0%, rgba(4, 43, 35, 0.08) 22%, rgba(3, 5, 4, 0) 48%),
+        linear-gradient(180deg, #030504 0%, #061611 36%, #08281f 100%);
       color: var(--ink);
-      font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     header[data-testid="stHeader"] { background: transparent; }
     .block-container { max-width: 1360px; padding-top: 1.2rem; }
     h1, h2, h3, p, label, span, div { letter-spacing: 0; }
     .hero {
       padding: 26px 0 18px;
-      border-bottom: 3px solid var(--blue);
+      border-bottom: 1px solid rgba(208,170,132,0.54);
       margin-bottom: 20px;
       position: relative;
     }
@@ -123,17 +124,17 @@ st.markdown(
       content: "";
       position: absolute;
       left: 0;
-      bottom: -3px;
-      width: 132px;
-      height: 3px;
+      bottom: -1px;
+      width: 58px;
+      height: 1px;
       background: var(--orange);
     }
     .hero-title {
       color: var(--navy);
-      font-size: clamp(2.25rem, 5.4vw, 4.7rem);
-      line-height: 0.91;
-      font-family: "Instrument Serif", Georgia, serif;
-      font-weight: 400;
+      font-size: clamp(2.05rem, 5vw, 4.2rem);
+      line-height: 0.96;
+      font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-weight: 800;
       letter-spacing: 0;
       margin: 0;
     }
@@ -142,7 +143,7 @@ st.markdown(
       max-width: 760px;
       margin-top: 14px;
       font-size: 1.05rem;
-      line-height: 1.55;
+      line-height: 1.52;
     }
     .hero-meta {
       display: flex;
@@ -151,12 +152,13 @@ st.markdown(
       margin-top: 16px;
     }
     .pill {
-      border: 1px solid rgba(246,240,232,0.12);
-      background: rgba(255,255,255,0.055);
+      border: 1px solid rgba(208,170,132,0.20);
+      background: rgba(0,0,0,0.20);
       color: var(--soft-ink);
       border-radius: 999px;
       padding: 8px 12px;
-      font-size: 0.86rem;
+      font-size: 0.78rem;
+      font-weight: 600;
       backdrop-filter: blur(18px);
     }
     .command-band {
@@ -167,23 +169,27 @@ st.markdown(
       margin: 4px 0 16px;
     }
     .command-main {
-      background: linear-gradient(135deg, rgba(18,23,29,0.92), rgba(12,16,21,0.92));
-      border: 1px solid rgba(101,231,241,0.18);
-      border-top: 4px solid var(--blue);
+      background: linear-gradient(135deg, rgba(8,37,31,0.90), rgba(5,18,15,0.92));
+      border: 1px solid rgba(208,170,132,0.18);
+      border-top: 1px solid rgba(208,170,132,0.52);
       border-radius: 8px;
       padding: 18px;
       box-shadow: 0 28px 80px rgba(0,0,0,0.30);
-      backdrop-filter: blur(22px);
+      backdrop-filter: blur(18px);
     }
     .command-kicker {
-      color: var(--blue);
+      color: var(--orange);
       font-size: 0.78rem;
+      font-family: "IBM Plex Mono", monospace;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
       margin-bottom: 8px;
     }
     .command-value {
       font-size: clamp(2.4rem, 5vw, 4.4rem);
       line-height: 0.98;
-      font-weight: 760;
+      font-weight: 800;
       letter-spacing: 0;
       color: var(--navy);
     }
@@ -201,8 +207,8 @@ st.markdown(
       height: 100%;
     }
     .mandate-tile {
-      border: 1px solid rgba(246,240,232,0.10);
-      background: rgba(255,255,255,0.055);
+      border: 1px solid rgba(208,170,132,0.13);
+      background: rgba(5,23,19,0.66);
       border-radius: 8px;
       padding: 14px;
       min-height: 108px;
@@ -211,6 +217,9 @@ st.markdown(
       display: block;
       color: var(--muted);
       font-size: 0.76rem;
+      font-family: "IBM Plex Mono", monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
       margin-bottom: 8px;
     }
     .mandate-tile strong {
@@ -236,8 +245,8 @@ st.markdown(
     }
     div[data-testid="stMetric"] {
       background: var(--panel);
-      border: 1px solid rgba(246,240,232,0.11);
-      border-top: 3px solid rgba(215,255,100,0.68);
+      border: 1px solid rgba(208,170,132,0.15);
+      border-top: 1px solid rgba(208,170,132,0.45);
       border-radius: 8px;
       padding: 12px 14px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.22);
@@ -246,7 +255,10 @@ st.markdown(
     div[data-testid="stMetricLabel"] {
       color: var(--muted);
       font-size: 0.78rem;
+      font-family: "IBM Plex Mono", monospace;
       font-weight: 520;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
     }
     div[data-testid="stMetricValue"] {
       color: var(--navy);
@@ -276,7 +288,7 @@ st.markdown(
     }
     .quiet-panel {
       background: var(--panel);
-      border: 1px solid rgba(246,240,232,0.10);
+      border: 1px solid rgba(208,170,132,0.13);
       border-radius: 8px;
       padding: 16px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.22);
@@ -288,8 +300,8 @@ st.markdown(
       gap: 10px;
     }
     .read-card {
-      border: 1px solid rgba(246,240,232,0.10);
-      background: rgba(255,255,255,0.055);
+      border: 1px solid rgba(208,170,132,0.13);
+      background: rgba(5,23,19,0.62);
       border-radius: 8px;
       padding: 14px;
     }
@@ -315,8 +327,8 @@ st.markdown(
       margin-bottom: 8px;
     }
     .model-card {
-      border: 1px solid rgba(246,240,232,0.10);
-      background: rgba(255,255,255,0.055);
+      border: 1px solid rgba(208,170,132,0.13);
+      background: rgba(5,23,19,0.62);
       border-radius: 8px;
       padding: 12px;
     }
@@ -337,8 +349,8 @@ st.markdown(
       margin: 8px 0 12px;
     }
     .change-card {
-      background: rgba(255,255,255,0.055);
-      border: 1px solid rgba(246,240,232,0.10);
+      background: rgba(5,23,19,0.62);
+      border: 1px solid rgba(208,170,132,0.13);
       border-radius: 8px;
       padding: 12px 13px;
     }
@@ -367,8 +379,8 @@ st.markdown(
       margin: 8px 0 12px;
     }
     .signal-card {
-      border: 1px solid rgba(246,240,232,0.10);
-      background: rgba(255,255,255,0.055);
+      border: 1px solid rgba(208,170,132,0.13);
+      background: rgba(5,23,19,0.62);
       border-radius: 8px;
       padding: 14px;
       min-height: 142px;
@@ -401,7 +413,7 @@ st.markdown(
     }
     .mini-metric {
       background: var(--panel);
-      border: 1px solid rgba(246,240,232,0.10);
+      border: 1px solid rgba(208,170,132,0.13);
       border-left: 3px solid var(--orange);
       border-radius: 8px;
       padding: 12px 13px;
@@ -449,8 +461,8 @@ st.markdown(
       align-items: stretch;
     }
     div[role="radiogroup"] label {
-      border: 1px solid rgba(246,240,232,0.10);
-      background: rgba(255,255,255,0.055);
+      border: 1px solid rgba(208,170,132,0.13);
+      background: rgba(5,23,19,0.62);
       border-radius: 999px;
       padding: 7px 12px;
       min-height: 38px;
@@ -465,7 +477,7 @@ st.markdown(
       color: white !important;
     }
     .refresh-panel {
-      border: 1px solid rgba(246,240,232,0.10);
+      border: 1px solid rgba(208,170,132,0.13);
       border-left: 4px solid var(--orange);
       background: linear-gradient(135deg, rgba(20,26,33,0.92), rgba(12,16,21,0.92));
       border-radius: 8px;
@@ -492,8 +504,8 @@ st.markdown(
       margin: 10px 0;
     }
     .mobile-card {
-      border: 1px solid rgba(246,240,232,0.10);
-      background: rgba(255,255,255,0.055);
+      border: 1px solid rgba(208,170,132,0.13);
+      background: rgba(5,23,19,0.62);
       border-radius: 8px;
       padding: 12px;
       min-width: 0;
@@ -522,16 +534,16 @@ st.markdown(
       overflow-wrap: anywhere;
     }
     div[data-testid="stDataFrame"] {
-      border: 1px solid rgba(246,240,232,0.10);
+      border: 1px solid rgba(208,170,132,0.13);
       border-radius: 8px;
       overflow: hidden;
       background: var(--panel-solid);
     }
     div[data-testid="stDataFrame"] * {
-      font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+      font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
     }
     div[data-baseweb="select"] > div {
-      border: 1px solid rgba(246,240,232,0.16) !important;
+      border: 1px solid rgba(208,170,132,0.20) !important;
       background: rgba(255,255,255,0.065) !important;
       border-radius: 8px !important;
       color: var(--ink) !important;
@@ -540,7 +552,7 @@ st.markdown(
     div[data-baseweb="select"] div,
     div[data-baseweb="select"] input {
       color: var(--ink) !important;
-      font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+      font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
     }
     div[data-testid="stSelectbox"] label,
     div[data-testid="stSelectbox"] label *,
@@ -555,20 +567,20 @@ st.markdown(
     ul[role="listbox"] {
       background: #11171d !important;
       color: var(--ink) !important;
-      border: 1px solid rgba(246,240,232,0.12) !important;
+      border: 1px solid rgba(208,170,132,0.18) !important;
     }
     input, textarea {
       color: var(--ink) !important;
       background: rgba(255,255,255,0.065) !important;
-      border-color: rgba(246,240,232,0.14) !important;
+      border-color: rgba(208,170,132,0.18) !important;
     }
     button[kind="primary"], .stButton button {
       border-radius: 999px !important;
-      border: 1px solid rgba(215,255,100,0.32) !important;
+      border: 1px solid rgba(208,170,132,0.44) !important;
       background: var(--orange) !important;
       color: #080b0f !important;
       font-weight: 650 !important;
-      box-shadow: 0 10px 28px rgba(215,255,100,0.18) !important;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.18) !important;
     }
     @media (max-width: 900px) {
       .read-grid, .model-grid, .change-list, .signal-grid, .command-band, .mandate-grid { grid-template-columns: 1fr; }
