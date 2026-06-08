@@ -354,6 +354,88 @@ def test_monthly_update_updates_balance_sheet_core_rows_atomically():
     assert result.loc[result["Asset class"].eq("NET WORTH"), "Notes"].iloc[0] == "Updated atomically from monthly update row"
 
 
+def test_market_growth_metrics_show_ytd_and_total_for_listed_shares(monkeypatch):
+    monthly = pd.DataFrame(
+        [
+            {"Date": "2026-01-01", "Shares": 100_000},
+            {"Date": "2026-06-01", "Shares": 130_000},
+        ]
+    )
+    holdings = pd.DataFrame(
+        [
+            {
+                "Ticker": "ABC",
+                "Currency": "AUD",
+                "Shares": 10,
+                "Equity / value native": 1_200,
+                "Profit / loss native": 200,
+                "Source": "workbook",
+            },
+            {
+                "Ticker": "XYZ",
+                "Currency": "AUD",
+                "Shares": 5,
+                "Equity / value native": 800,
+                "Profit / loss native": -100,
+                "Source": "workbook",
+            },
+        ]
+    )
+
+    monkeypatch.setattr(
+        portfolio,
+        "read_table",
+        lambda name: monthly if name == "monthly_tracking" else holdings if name == "listed_share_snapshot" else pd.DataFrame(),
+    )
+    monkeypatch.setattr(portfolio, "read_price_cache", lambda: {"prices": {}, "fx": {"USD_AUD": {"rate": 1}}})
+
+    result = portfolio.listed_share_growth_metrics()
+
+    assert result["ytd_growth_pct"] == pytest.approx(0.30)
+    assert result["total_growth_pct"] == pytest.approx(100 / 1_900)
+    assert result["total_cost_base_aud"] == pytest.approx(1_900)
+    assert result["total_live_value_aud"] == pytest.approx(2_000)
+
+
+def test_bitcoin_growth_metrics_show_ytd_and_total_with_cost_base_caveat(monkeypatch):
+    monthly = pd.DataFrame(
+        [
+            {"Date": "2026-01-01", "Crypto": 400_000},
+            {"Date": "2026-06-01", "Crypto": 440_000},
+        ]
+    )
+    investments = pd.DataFrame(
+        [
+            {
+                "Asset / sleeve": "BTC / crypto aggregate",
+                "Category": "Crypto",
+                "Units": 4,
+                "Value AUD": 440_000,
+                "Evidence / source": "Ledger screenshot; cost base now at least A$160k before fees/older history.",
+            }
+        ]
+    )
+
+    monkeypatch.setattr(
+        portfolio,
+        "read_table",
+        lambda name: monthly if name == "monthly_tracking" else investments if name == "investment_register" else pd.DataFrame(),
+    )
+    monkeypatch.setattr(
+        portfolio,
+        "read_price_cache",
+        lambda: {"crypto": {"BTC_AUD": {"price": 120_000, "source": "test feed"}}},
+    )
+
+    result = portfolio.bitcoin_growth_metrics()
+
+    assert result["ytd_growth_pct"] == pytest.approx(0.10)
+    assert result["total_growth_pct"] == pytest.approx(2.0)
+    assert result["live_value_aud"] == pytest.approx(480_000)
+    assert result["cost_base_aud"] == pytest.approx(160_000)
+    assert result["cost_base_status"] == "minimum_management_cost_base"
+
+
 def test_formula_fidelity_blocks_operating_sheet_with_blank_formula_cache():
     audit = {
         "01 Executive Dashboard": {"Formula cached blanks": 0},

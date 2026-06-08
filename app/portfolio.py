@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
 
 import pandas as pd
 
@@ -236,6 +237,141 @@ def monthly_component_changes() -> pd.DataFrame:
     frame = changes[cols].copy()
     frame = frame.iloc[1:].reset_index(drop=True)
     return frame
+
+
+def _as_float(value: object) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(number):
+        return None
+    return number
+
+
+def _pct_change(current: object, base: object) -> float | None:
+    current_number = _as_float(current)
+    base_number = _as_float(base)
+    if current_number is None or base_number is None or base_number == 0:
+        return None
+    return (current_number - base_number) / base_number
+
+
+def ytd_growth_for_monthly_column(column: str) -> float | None:
+    """Return calendar-year-to-date balance growth for a monthly tracker column."""
+    monthly = read_table("monthly_tracking")
+    if monthly.empty or column not in monthly or "Date" not in monthly:
+        return None
+    frame = monthly[["Date", column]].copy()
+    frame["Date"] = pd.to_datetime(frame["Date"], errors="coerce")
+    frame[column] = numeric(frame[column])
+    frame = frame.dropna(subset=["Date"]).sort_values("Date")
+    if frame.empty:
+        return None
+    latest = frame.iloc[-1]
+    year_frame = frame[frame["Date"].dt.year.eq(latest["Date"].year)]
+    if year_frame.empty:
+        return None
+    return _pct_change(latest[column], year_frame.iloc[0][column])
+
+
+def _extract_aud_cost_base(text: str) -> tuple[float | None, str]:
+    """Extract a management AUD cost base from caveated source notes where no column exists."""
+    if not text:
+        return None, "unavailable"
+    match = re.search(r"cost base.{0,80}?(?:A\$)?\s*([0-9][0-9,]*(?:\.\d+)?)\s*([kKmM])?", text, flags=re.IGNORECASE)
+    if not match:
+        return None, "unavailable"
+    amount = float(match.group(1).replace(",", ""))
+    suffix = (match.group(2) or "").lower()
+    if suffix == "k":
+        amount *= 1_000
+    elif suffix == "m":
+        amount *= 1_000_000
+    status = "minimum_management_cost_base" if re.search(r"at least|minimum|before fees|older history", text, flags=re.IGNORECASE) else "management_cost_base"
+    return amount, status
+
+
+def listed_share_growth_metrics() -> dict[str, object]:
+    """Return headline growth metrics for the listed-share portfolio."""
+    holdings = holdings_with_live_prices()
+    if holdings.empty:
+        return {
+            "ytd_growth_pct": ytd_growth_for_monthly_column("Shares"),
+            "total_growth_pct": None,
+            "total_live_value_aud": 0.0,
+            "total_cost_base_aud": None,
+            "total_pl_aud": 0.0,
+            "status": "no_listed_share_holdings",
+        }
+
+    live_values = pd.to_numeric(holdings.get("Live value AUD", pd.Series(dtype=float)), errors="coerce")
+    cost_bases = pd.to_numeric(holdings.get("Cost base AUD", pd.Series(dtype=float)), errors="coerce")
+    total_live_value = float(live_values.dropna().sum())
+    total_cost_base = float(cost_bases.dropna().sum()) if cost_bases.notna().any() else None
+    total_pl = total_live_value - total_cost_base if total_cost_base not in (None, 0) else None
+    return {
+        "ytd_growth_pct": ytd_growth_for_monthly_column("Shares"),
+        "total_growth_pct": _pct_change(total_live_value, total_cost_base),
+        "total_live_value_aud": total_live_value,
+        "total_cost_base_aud": total_cost_base,
+        "total_pl_aud": total_pl,
+        "status": "ok" if total_cost_base not in (None, 0) else "cost_base_unavailable",
+    }
+
+
+def bitcoin_growth_metrics() -> dict[str, object]:
+    """Return BTC YTD balance growth and total return using explicit/management cost-base evidence."""
+    investments = read_table("investment_register")
+    empty_result = {
+        "ytd_growth_pct": ytd_growth_for_monthly_column("Crypto"),
+        "total_growth_pct": None,
+        "live_value_aud": None,
+        "workbook_value_aud": None,
+        "cost_base_aud": None,
+        "cost_base_status": "unavailable",
+        "units": None,
+        "price_aud": None,
+    }
+    if investments.empty:
+        return empty_result
+
+    category = investments.get("Category", pd.Series("", index=investments.index)).astype(str).str.lower()
+    sleeve = investments.get("Asset / sleeve", pd.Series("", index=investments.index)).astype(str).str.lower()
+    btc_rows = investments[category.eq("crypto") | sleeve.str.contains("btc|bitcoin", na=False)]
+    if btc_rows.empty:
+        return empty_result
+
+    row = btc_rows.iloc[0]
+    units = _as_float(pd.to_numeric(pd.Series([row.get("Units")]), errors="coerce").iloc[0])
+    workbook_value = _as_float(pd.to_numeric(pd.Series([row.get("Value AUD")]), errors="coerce").iloc[0])
+    cache = read_price_cache()
+    btc_aud = cache.get("crypto", {}).get("BTC_AUD", {}) if isinstance(cache, dict) else {}
+    price_aud = _as_float(pd.to_numeric(pd.Series([btc_aud.get("price")]), errors="coerce").iloc[0])
+    live_value = units * price_aud if units is not None and price_aud is not None else workbook_value
+
+    cost_base = None
+    cost_base_status = "unavailable"
+    for col in ["Cost base AUD", "AUD cost base", "Cost base", "Native cost base"]:
+        if col in btc_rows.columns:
+            cost_base = _as_float(pd.to_numeric(pd.Series([row.get(col)]), errors="coerce").iloc[0])
+            if cost_base is not None:
+                cost_base_status = "explicit_cost_base"
+                break
+    if cost_base is None:
+        note_text = " | ".join(str(row.get(col, "")) for col in ["Evidence / source", "Thesis", "Entity note", "Notes"])
+        cost_base, cost_base_status = _extract_aud_cost_base(note_text)
+
+    return {
+        "ytd_growth_pct": ytd_growth_for_monthly_column("Crypto"),
+        "total_growth_pct": _pct_change(live_value, cost_base),
+        "live_value_aud": live_value,
+        "workbook_value_aud": workbook_value,
+        "cost_base_aud": cost_base,
+        "cost_base_status": cost_base_status,
+        "units": units,
+        "price_aud": price_aud,
+    }
 
 
 def price_source_view() -> pd.DataFrame:

@@ -35,10 +35,12 @@ from app.market_prices import is_trackable_ticker, refresh_prices
 from app.monthly_update import build_monthly_update_frame
 from app.portfolio import (
     allocation_view,
+    bitcoin_growth_metrics,
     cockpit_data_status,
     executive_brief,
     holdings_with_live_prices,
     latest_month_bridge,
+    listed_share_growth_metrics,
     monthly_change_view,
     numeric,
     price_source_view,
@@ -754,6 +756,21 @@ def compact_amount(value: object, currency: str = "A$") -> str:
     return f"{currency}{number:,.0f}"
 
 
+def signed_percent(value: object) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "-"
+    if pd.isna(number):
+        return "-"
+    prefix = "+" if number > 0 else ""
+    return f"{prefix}{number * 100:.1f}%"
+
+
+def percent_note(label: str, value: object) -> str:
+    return f"{label} {signed_percent(value)}"
+
+
 def card_grid(cards: list[dict[str, str]]) -> None:
     html = "<div class='mobile-card-grid'>"
     for card in cards:
@@ -1125,6 +1142,8 @@ def render_market_tape() -> None:
     btc_units_number = pd.to_numeric(pd.Series([btc_units]), errors="coerce").iloc[0]
     live_value_aud = btc_aud_price * btc_units_number if pd.notna(btc_aud_price) and pd.notna(btc_units_number) else pd.NA
     live_value_usd = btc_usd_price * btc_units_number if pd.notna(btc_usd_price) and pd.notna(btc_units_number) else pd.NA
+    btc_growth = bitcoin_growth_metrics()
+    btc_total_note = "vs min mgmt cost base" if btc_growth.get("cost_base_status") == "minimum_management_cost_base" else "vs cost base"
     card_grid(
         [
             {
@@ -1146,6 +1165,16 @@ def render_market_tape() -> None:
                 "label": "Workbook BTC mark",
                 "value": compact_amount(workbook_value),
                 "note": "Fallback management value",
+            },
+            {
+                "label": "BTC YTD growth",
+                "value": signed_percent(btc_growth.get("ytd_growth_pct")),
+                "note": "Calendar-year balance growth from monthly tracker",
+            },
+            {
+                "label": "BTC total growth",
+                "value": signed_percent(btc_growth.get("total_growth_pct")),
+                "note": btc_total_note,
             },
         ]
     )
@@ -1196,11 +1225,26 @@ def render_market_tape() -> None:
         return
 
     watchlist = portfolio_watchlist()
+    share_growth = listed_share_growth_metrics()
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Unique tickers", len(set(tickers)))
     c2.metric("Holding rows", len(tickers))
-    c3.metric("Live listed value", money(holdings["Live value AUD"].sum()))
-    c4.metric("Live P/L", money(holdings["Live P/L AUD"].sum()))
+    c3.metric("Live listed value", money(holdings["Live value AUD"].sum()), delta=percent_note("YTD", share_growth.get("ytd_growth_pct")))
+    c4.metric("Live P/L", money(holdings["Live P/L AUD"].sum()), delta=percent_note("Total", share_growth.get("total_growth_pct")))
+    card_grid(
+        [
+            {
+                "label": "Shares YTD growth",
+                "value": signed_percent(share_growth.get("ytd_growth_pct")),
+                "note": "Calendar-year balance growth from monthly tracker",
+            },
+            {
+                "label": "Shares total growth",
+                "value": signed_percent(share_growth.get("total_growth_pct")),
+                "note": "Since holding vs live/current AUD cost base",
+            },
+        ]
+    )
 
     if not watchlist.empty:
         section("Investment watchlist", "Ranked by current AUD exposure with live/workbook confidence kept visible.")
