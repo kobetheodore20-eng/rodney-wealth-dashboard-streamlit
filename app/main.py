@@ -33,6 +33,10 @@ from app.insights import (
 )
 from app.market_prices import is_trackable_ticker, refresh_prices
 from app.monthly_update import build_monthly_update_frame
+from app import portfolio as portfolio_module
+
+portfolio_module = importlib.reload(portfolio_module)
+
 from app.portfolio import (
     allocation_view,
     bitcoin_growth_metrics,
